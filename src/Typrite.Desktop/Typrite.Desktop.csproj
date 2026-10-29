@@ -17,9 +17,17 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../Typrite.Contracts/Typrite.Contracts.csproj" />
+    <ProjectReference Include="../Typrite.LocalStore/Typrite.LocalStore.csproj" />
+    <ProjectReference Include="../Typrite.Player/Typrite.Player.csproj" />
     <ProjectReference Include="../Typrite.Shell/Typrite.Shell.csproj" />
     <ProjectReference Include="../Typrite.Shell.Win32/Typrite.Shell.Win32.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\house-400x225.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="typrite.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

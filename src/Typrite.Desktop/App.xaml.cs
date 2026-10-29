@@ -7,10 +7,8 @@ namespace Typrite.Desktop;
 
 public partial class App : Application
 {
-    /// <summary>Example value from the architecture guide; not a client-approved budget.</summary>
-    private const double ReservationDip = 210;
-
     private readonly List<BarWindow> _bars = [];
+    private DeviceServices? _services;
     private Mutex? _singleInstance;
     private DispatcherQueueTimer? _rebuildTimer;
     private bool _rebuilding;
@@ -34,14 +32,30 @@ public partial class App : Application
         _rebuildTimer.IsRepeating = false;
         _rebuildTimer.Tick += (_, _) => RebuildBars();
 
+        _services = new DeviceServices(DesktopSettings.Load(), DispatcherQueue.GetForCurrentThread());
         CreateBars();
+        _ = ConnectAsync(_services);
+    }
+
+    /// <summary>Bars render from cached state immediately; registration and policy arrive in the background.</summary>
+    private static async Task ConnectAsync(DeviceServices services)
+    {
+        try
+        {
+            await services.RegisterDevAsync(CancellationToken.None);
+            await services.RefreshConfigurationAsync(CancellationToken.None);
+        }
+        catch (HttpRequestException)
+        {
+            // Offline at start: keep the cached configuration and retry on the next upload tick.
+        }
     }
 
     private void CreateBars()
     {
         foreach (var area in DisplayArea.FindAll())
         {
-            var bar = new BarWindow(area, ReservationDip, _policy);
+            var bar = new BarWindow(area, _services!, _policy);
             bar.TopologyChanged += (_, _) => _rebuildTimer?.Start();
             bar.Closed += (_, _) =>
             {

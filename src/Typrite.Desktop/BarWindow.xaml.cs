@@ -2,21 +2,24 @@ using System.Globalization;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Typrite.Player.Playback;
 using Typrite.Shell.AppBar;
 using Typrite.Shell.Displays;
 using Typrite.Shell.Fullscreen;
 using Typrite.Shell.Geometry;
 using Typrite.Shell.Win32;
+using Windows.Devices.Geolocation;
 using WinRT.Interop;
 
 namespace Typrite.Desktop;
 
-/// <summary>One bar per display. All shell logic lives in <see cref="BarCoordinator"/>; this class is wiring only.</summary>
+/// <summary>One bar per display. Shell logic lives in <see cref="BarCoordinator"/>, delivery in <see cref="DeviceServices"/>; this class is wiring.</summary>
 public sealed partial class BarWindow : Window, IBarSurface
 {
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan MaxDelay = TimeSpan.FromSeconds(1);
 
+    private readonly DeviceServices _services;
     private readonly nint _hwnd;
     private readonly AppBarHost _host = new();
     private readonly OverlappedPresenter _presenter;
@@ -26,10 +29,16 @@ public sealed partial class BarWindow : Window, IBarSurface
     private readonly WinEventHook _hook;
     private readonly QuietPeriodCoalescer _coalescer;
     private readonly DispatcherQueueTimer _clock;
+    private readonly DispatcherQueueTimer _adTimer;
+    private readonly DispatcherQueueTimer _weatherTimer;
+    private AdVisibilityTracker? _tracker;
+    private bool _rotating;
 
-    public BarWindow(DisplayArea area, double reservationDip, FullscreenPolicy policy)
+    public BarWindow(DisplayArea area, DeviceServices services, FullscreenPolicy policy)
     {
         InitializeComponent();
+        _services = services;
+        var config = services.Configuration;
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _presenter = OverlappedPresenter.Create();
@@ -46,7 +55,8 @@ public sealed partial class BarWindow : Window, IBarSurface
         var dpi = WindowZOrder.DpiOf(_hwnd);
         _display = ResolveDisplay(area, bounds, dpi);
 
-        _bar = new BarCoordinator(_host, this, reservationDip) { Policy = policy, Observer = Observe };
+        _bar = new BarCoordinator(_host, this, config.Layout.ReservationDip) { Policy = policy, Observer = Observe };
+        _bar.ModeChanged += (_, mode) => _tracker?.DisplayModeChanged(mode);
         _host.ShellRestarted += (_, _) => _bar.ShellRestarted();
         _host.DpiChanged += (_, newDpi) => _bar.DpiChanged(newDpi);
         _host.DisplayTopologyChanged += (_, _) => TopologyChanged?.Invoke(this, EventArgs.Empty);
@@ -57,15 +67,19 @@ public sealed partial class BarWindow : Window, IBarSurface
         _hook = new WinEventHook();
         _hook.Changed += (_, _) => _coalescer.Signal();
 
-        _clock = DispatcherQueue.CreateTimer();
-        _clock.Interval = TimeSpan.FromSeconds(1);
-        _clock.Tick += (_, _) => UpdateClock();
-        _clock.Start();
+        _clock = Timer(TimeSpan.FromSeconds(1), UpdateClock);
+        _adTimer = Timer(TimeSpan.FromSeconds(config.Ads.DecisionIntervalSeconds), () => _ = RotateAdAsync());
+        _weatherTimer = Timer(TimeSpan.FromSeconds(config.Weather.RefreshSeconds), () => _ = RefreshWeatherAsync());
         UpdateClock();
+        _ = RotateAdAsync();
+        _ = RefreshWeatherAsync();
 
         Closed += (_, _) =>
         {
             _clock.Stop();
+            _adTimer.Stop();
+            _weatherTimer.Stop();
+            Ad.Stop();
             _hook.Dispose();
             _coalescer.Dispose();
             _bar.Detach();
@@ -88,6 +102,15 @@ public sealed partial class BarWindow : Window, IBarSurface
 
     void IBarSurface.LeaveOverlay() => _presenter.IsAlwaysOnTop = false;
 
+    private DispatcherQueueTimer Timer(TimeSpan interval, Action tick)
+    {
+        var t = DispatcherQueue.CreateTimer();
+        t.Interval = interval;
+        t.Tick += (_, _) => tick();
+        t.Start();
+        return t;
+    }
+
     private DisplayObservation Observe() =>
         FullscreenObserver.Observe(
             _display,
@@ -95,6 +118,66 @@ public sealed partial class BarWindow : Window, IBarSurface
             SecureDesktopProbe.IsSecureDesktopActive(),
             _bar.Policy,
             _ => OverlayProbe.IsBarVisibleAt(_hwnd, _bar.Bounds));
+
+    /// <summary>Asks for the next creative only while the bar can be seen; a hidden bar keeps what it has and claims nothing.</summary>
+    private async Task RotateAdAsync()
+    {
+        if (_rotating || Mode is not (DisplayMode.NormalReserved or DisplayMode.CompatibleOverlay))
+        {
+            return;
+        }
+
+        _rotating = true;
+        try
+        {
+            var resolved = await _services.Pipeline.NextAsync(_display.Key.Value, CancellationToken.None);
+            var ctx = new PlaybackContext(
+                _services.Credential.DeviceId, _services.SessionId, _display.Key.Value,
+                resolved.Decision?.DecisionId, resolved.Manifest.CreativeId,
+                _services.Configuration.ConfigurationVersion, resolved.Manifest.DurationMs);
+            var tracker = new AdVisibilityTracker(ctx, TimeProvider.System, _services.Record);
+            tracker.DisplayModeChanged(Mode);
+            _tracker = tracker;
+            await Ad.ShowAsync(resolved, tracker);
+        }
+        finally
+        {
+            _rotating = false;
+        }
+    }
+
+    private async Task RefreshWeatherAsync()
+    {
+        var (lat, lon) = await TryLocateAsync();
+        var report = await _services.GetWeatherAsync(lat, lon, CancellationToken.None);
+        if (report is null)
+        {
+            return;
+        }
+
+        WeatherText.Text = string.Create(CultureInfo.CurrentCulture, $"{Math.Round(report.TemperatureC)}°C · {report.Condition}");
+        LocationText.Text = report.LocationLabel;
+    }
+
+    /// <summary>Coarse location only, and only when the user has allowed desktop apps to use it.</summary>
+    private static async Task<(double?, double?)> TryLocateAsync()
+    {
+        try
+        {
+            if (await Geolocator.RequestAccessAsync() != GeolocationAccessStatus.Allowed)
+            {
+                return (null, null);
+            }
+
+            var locator = new Geolocator { DesiredAccuracyInMeters = 5000 };
+            var pos = await locator.GetGeopositionAsync(TimeSpan.FromHours(1), TimeSpan.FromSeconds(10));
+            return (pos.Coordinate.Point.Position.Latitude, pos.Coordinate.Point.Position.Longitude);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or TimeoutException or System.Runtime.InteropServices.COMException)
+        {
+            return (null, null);
+        }
+    }
 
     private static DisplayInfo ResolveDisplay(DisplayArea area, PhysicalRect bounds, uint dpi)
     {

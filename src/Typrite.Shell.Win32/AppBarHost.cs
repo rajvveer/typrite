@@ -31,6 +31,9 @@ public sealed class AppBarHost : IAppBarHost
     /// <summary>WM_DPICHANGED with the new DPI.</summary>
     public event EventHandler<uint>? DpiChanged;
 
+    /// <summary>WM_DISPLAYCHANGE: monitors added, removed, rotated or re-scaled.</summary>
+    public event EventHandler? DisplayTopologyChanged;
+
     public PhysicalRect Register(nint hwnd, PhysicalRect monitor, int heightPx)
     {
         if (_registered)
@@ -117,6 +120,9 @@ public sealed class AppBarHost : IAppBarHost
         {
             case WM_DPICHANGED:
                 DpiChanged?.Invoke(this, (uint)((long)wParam >> 16) & 0xFFFF);
+                break;
+            case WM_DISPLAYCHANGE:
+                DisplayTopologyChanged?.Invoke(this, EventArgs.Empty);
                 break;
             case WM_ACTIVATE when _registered:
                 Forward(ABM_ACTIVATE);

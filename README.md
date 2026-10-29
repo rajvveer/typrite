@@ -23,7 +23,9 @@ Requires .NET 10 SDK. The Desktop project needs Windows App SDK 2.6.4 and must b
 
 ## Status
 
-P1 (native bar proof): bar window per display, AppBar registration, yield on `ABN_FULLSCREENAPP`, re-register on Explorer restart, DPI change handling, clock. Weather and ad regions are placeholders. Not yet verified on physical Windows hardware.
+P1 (native bar proof): bar window per display, AppBar registration, re-register on Explorer restart, DPI change handling, clock.
+P2 (full-screen controller): WinEvent-hook detection, DWM bounds and cloaking, per-display classification with yield by default, allowlisted overlay with a visibility probe, secure-desktop detection, display rebuild on topology change, stable display keys from EDID.
+Weather and ad regions are placeholders. Not yet verified on physical Windows hardware.
 
 ## Rules
 

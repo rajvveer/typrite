@@ -31,6 +31,27 @@ jobs:
       - run: dotnet test tests/Typrite.Domain.Tests --configuration Release
       - run: dotnet test tests/Typrite.Api.IntegrationTests --configuration Release
       - run: dotnet test tests/Typrite.Worker.Tests --configuration Release
+      - run: dotnet test tests/Typrite.Agent.Tests --configuration Release
+
+  admin-console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: src/admin/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test
 
   windows-build:
     runs-on: windows-latest
@@ -41,4 +62,5 @@ jobs:
           global-json-file: global.json
       - run: dotnet test tests/Typrite.Shell.Tests --configuration Release
       - run: dotnet build src/Typrite.Shell.Win32 --configuration Release
+      - run: dotnet build src/Typrite.Agent --configuration Release
       - run: dotnet build src/Typrite.Desktop --configuration Release -p:Platform=x64

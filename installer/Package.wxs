@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Typrite installer (WiX 5). Installs:
+    - Typrite.Agent as a Windows Service under a virtual service account, started automatically.
+    - Typrite.Desktop under Program Files, launched for every user at sign-in via the HKLM Run key.
+    - typrite.json with the API base URL (property APIBASEURL) and an optional one-time claim token (property CLAIMTOKEN),
+      written to %ProgramData%\Typrite\claim.token for the agent's first start and deleted by the agent after enrollment.
+  Uninstall removes the service, the Run key and program files. It leaves %LOCALAPPDATA%\Typrite (per-user cache)
+  and %ProgramData%\Typrite\agent-state.json so a reinstall keeps the device identity; the device key stays in CNG.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Typrite" Manufacturer="Typrite" Version="0.1.0" UpgradeCode="7d9d4b1e-2d6f-4d2a-9c1a-4f2d0a6d1c01" Scope="perMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Typrite is already installed." AllowSameVersionUpgrades="yes" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="APIBASEURL" Value="https://localhost:7210/" />
+    <Property Id="CLAIMTOKEN" Secure="yes" />
+    <Property Id="PUBLISHERKEYPEM" Secure="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="RootDir" Name="Typrite">
+        <Directory Id="DesktopDir" Name="Desktop" />
+        <Directory Id="AgentDir" Name="Agent" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DataDir" Name="Typrite" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="AgentService" Directory="AgentDir">
+      <Component Id="AgentServiceInstall" Guid="b1a0b2f4-5c3d-4e6f-8a9b-0c1d2e3f4a51">
+        <File Id="AgentExe" Source="$(var.AgentPublishDir)\Typrite.Agent.exe" KeyPath="yes" />
+        <ServiceInstall Id="TypriteAgentService" Name="Typrite.Agent" DisplayName="Typrite Device Agent"
+                        Description="Enrolls this device, applies policy and signed updates, and brokers tokens to the Typrite bar."
+                        Start="auto" Type="ownProcess" ErrorControl="normal" Account="NT SERVICE\Typrite.Agent" Vital="yes">
+          <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart" ThirdFailureActionType="restart" RestartServiceDelayInSeconds="60" />
+        </ServiceInstall>
+        <ServiceControl Id="TypriteAgentControl" Name="Typrite.Agent" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+      <Component Id="AgentSettings" Guid="c2b1c3a5-6d4e-4f70-9bac-1d2e3f4a5b62">
+        <File Id="AgentSettingsJson" Source="$(var.AgentPublishDir)\appsettings.json" KeyPath="yes" />
+        <util:XmlFile Id="AgentApiUrl" File="[AgentDir]appsettings.json" Action="setValue" ElementPath="/Agent/ApiBaseUrl" Value="[APIBASEURL]" Sequence="1" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="DesktopLaunch" Directory="DesktopDir">
+      <Component Id="DesktopRunKey" Guid="d3c2d4b6-7e5f-4081-acbd-2e3f4a5b6c73">
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Typrite" Type="string" Value="&quot;[DesktopDir]Typrite.Desktop.exe&quot;" KeyPath="yes" />
+      </Component>
+      <Component Id="DesktopSettings" Guid="e4d3e5c7-8f60-4192-bdce-3f4a5b6c7d84">
+        <File Id="DesktopSettingsJson" Source="$(var.DesktopPublishDir)\typrite.json" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="DataFolder" Directory="DataDir">
+      <Component Id="DataFolderAcl" Guid="f5e4f6d8-9071-42a3-cedf-4a5b6c7d8e95">
+        <CreateFolder>
+          <util:PermissionEx User="NT SERVICE\Typrite.Agent" GenericAll="yes" />
+          <util:PermissionEx User="Users" GenericRead="yes" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM" Key="Software\Typrite" Name="DataDir" Type="string" Value="[DataDir]" KeyPath="yes" />
+      </Component>
+      <Component Id="ClaimToken" Guid="06f5071e-a182-43b4-9f01-5b6c7d8e9fa6" Condition="CLAIMTOKEN">
+        <IniFile Id="ClaimTokenFile" Directory="DataDir" Name="claim.token" Action="addLine" Section="claim" Key="token" Value="[CLAIMTOKEN]" />
+        <RegistryValue Root="HKLM" Key="Software\Typrite" Name="ClaimDropped" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Level="1">
+      <ComponentGroupRef Id="DesktopFiles" />
+      <ComponentGroupRef Id="DesktopLaunch" />
+      <ComponentGroupRef Id="AgentFiles" />
+      <ComponentGroupRef Id="AgentService" />
+      <ComponentGroupRef Id="DataFolder" />
+    </Feature>
+  </Package>
+</Wix>

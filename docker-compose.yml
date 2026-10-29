@@ -1,0 +1,40 @@
+# Local backend: PostgreSQL + API + worker. The Windows desktop app and agent run on a Windows host and point at https://localhost:7210.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: typrite
+      POSTGRES_PASSWORD: typrite
+      POSTGRES_DB: typrite
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U typrite"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: { context: ., dockerfile: src/Typrite.Api/Dockerfile }
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ConnectionStrings__Typrite: Host=postgres;Database=typrite;Username=typrite;Password=typrite
+      Auth__AllowDevAuth: "true"
+      Api__PublicBaseUrl: https://localhost:7210
+      Storage__Root: /data/blobs
+      Database__MigrateOnStartup: "true"
+    ports: ["7210:8080"]
+    volumes: [blobs:/data/blobs]
+
+  worker:
+    build: { context: ., dockerfile: src/Typrite.Worker/Dockerfile }
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Typrite: Host=postgres;Database=typrite;Username=typrite;Password=typrite
+
+volumes:
+  pgdata:
+  blobs:

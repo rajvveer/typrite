@@ -13,6 +13,7 @@ public partial class App : Application
     private DispatcherQueueTimer? _rebuildTimer;
     private DispatcherQueueTimer? _commandTimer;
     private bool _rebuilding;
+    private bool _safeMode;
 
     /// <summary>Overlay allowlist. Empty until an app has passed the physical overlay test; later fed from device policy.</summary>
     private FullscreenPolicy _policy = FullscreenPolicy.YieldByDefault;
@@ -56,9 +57,11 @@ public partial class App : Application
             switch (command)
             {
                 case "enter-safe-mode":
+                    _safeMode = true;
                     _bars.ForEach(b => b.EnterSafeMode());
                     break;
                 case "leave-safe-mode":
+                    _safeMode = false;
                     _bars.ForEach(b => b.AuthorizeRecovery());
                     break;
                 case "restart-bar":
@@ -89,7 +92,7 @@ public partial class App : Application
     {
         foreach (var area in DisplayArea.FindAll())
         {
-            var bar = new BarWindow(area, _services!, _policy);
+            var bar = new BarWindow(area, _services!, _policy, _safeMode);
             bar.TopologyChanged += (_, _) => _rebuildTimer?.Start();
             bar.Closed += (_, _) =>
             {

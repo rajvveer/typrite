@@ -18,6 +18,7 @@ public sealed class AppBarHost : IAppBarHost
     private readonly SUBCLASSPROC _proc; // rooted for the lifetime of the subclass
     private nint _hwnd;
     private bool _registered;
+    private bool _sessionNotificationsRegistered;
 
     public AppBarHost() => _proc = SubclassProc;
 
@@ -33,6 +34,10 @@ public sealed class AppBarHost : IAppBarHost
 
     /// <summary>WM_DISPLAYCHANGE: monitors added, removed, rotated or re-scaled.</summary>
     public event EventHandler? DisplayTopologyChanged;
+
+    public event EventHandler? DesktopUnavailable;
+
+    public event EventHandler? DesktopRestored;
 
     public PhysicalRect Register(nint hwnd, PhysicalRect monitor, int heightPx)
     {
@@ -58,12 +63,14 @@ public sealed class AppBarHost : IAppBarHost
         }
 
         _registered = true;
+        RegisterSessionNotifications();
         return Reposition(monitor, heightPx);
     }
 
     public PhysicalRect Reposition(PhysicalRect monitor, int heightPx)
     {
         EnsureRegistered();
+        RegisterSessionNotifications();
 
         var data = NewData();
         data.uEdge = ABE_BOTTOM;
@@ -87,6 +94,12 @@ public sealed class AppBarHost : IAppBarHost
 
         var data = NewData();
         SHAppBarMessage(ABM_REMOVE, ref data);
+        if (_sessionNotificationsRegistered)
+        {
+            WTSUnRegisterSessionNotification(_hwnd);
+            _sessionNotificationsRegistered = false;
+        }
+
         RemoveWindowSubclass(_hwnd, _proc, SubclassId);
         _registered = false;
     }
@@ -118,6 +131,33 @@ public sealed class AppBarHost : IAppBarHost
 
         switch (uMsg)
         {
+            case WM_WTSSESSION_CHANGE:
+                switch ((int)wParam)
+                {
+                    case WTS_SESSION_LOCK:
+                    case WTS_CONSOLE_DISCONNECT:
+                    case WTS_REMOTE_DISCONNECT:
+                        DesktopUnavailable?.Invoke(this, EventArgs.Empty);
+                        break;
+                    case WTS_SESSION_UNLOCK:
+                    case WTS_CONSOLE_CONNECT:
+                    case WTS_REMOTE_CONNECT:
+                        DesktopRestored?.Invoke(this, EventArgs.Empty);
+                        break;
+                }
+
+                break;
+            case WM_POWERBROADCAST:
+                if ((int)wParam == PBT_APMSUSPEND)
+                {
+                    DesktopUnavailable?.Invoke(this, EventArgs.Empty);
+                }
+                else if ((int)wParam is PBT_APMRESUMEAUTOMATIC or PBT_APMRESUMESUSPEND)
+                {
+                    DesktopRestored?.Invoke(this, EventArgs.Empty);
+                }
+
+                return 1;
             case WM_DPICHANGED:
                 DpiChanged?.Invoke(this, (uint)((long)wParam >> 16) & 0xFFFF);
                 break;
@@ -142,6 +182,15 @@ public sealed class AppBarHost : IAppBarHost
     {
         var data = NewData();
         SHAppBarMessage(message, ref data);
+    }
+
+    private void RegisterSessionNotifications()
+    {
+        if (!_sessionNotificationsRegistered)
+        {
+            // WTS may not be ready at sign-in; retry during the bounded reconciliation tick.
+            _sessionNotificationsRegistered = WTSRegisterSessionNotification(_hwnd, 0); // this session only
+        }
     }
 
     private void EnsureRegistered()

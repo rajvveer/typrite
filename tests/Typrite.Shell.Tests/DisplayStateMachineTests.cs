@@ -122,8 +122,7 @@ public class DisplayStateMachineTests
     [InlineData(DisplayMode.CompatibleOverlay)]
     [InlineData(DisplayMode.YieldedFullscreen)]
     [InlineData(DisplayMode.ProtectedSurface)]
-    [InlineData(DisplayMode.SafeMode)]
-    public void Topology_change_enters_recovering_from_any_state(DisplayMode from)
+    public void Topology_change_enters_recovering_outside_safe_mode(DisplayMode from)
     {
         var sm = DriveTo(from);
 
@@ -144,6 +143,7 @@ public class DisplayStateMachineTests
 
         Assert.False(sm.Apply(DisplayEvent.BarVerified));
         Assert.False(sm.Apply(DisplayEvent.FullscreenEnded));
+        Assert.False(sm.Apply(DisplayEvent.TopologyChanged));
         Assert.Equal(DisplayMode.SafeMode, sm.Mode);
 
         Assert.True(sm.Apply(DisplayEvent.RecoveryAuthorized));

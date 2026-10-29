@@ -31,10 +31,13 @@ public sealed partial class BarWindow : Window, IBarSurface
     private readonly DispatcherQueueTimer _clock;
     private readonly DispatcherQueueTimer _adTimer;
     private readonly DispatcherQueueTimer _weatherTimer;
+    private readonly DispatcherQueueTimer _verificationTimer;
     private AdVisibilityTracker? _tracker;
     private bool _rotating;
+    private bool _closed;
+    private bool _desktopUnavailable;
 
-    public BarWindow(DisplayArea area, DeviceServices services, FullscreenPolicy policy)
+    public BarWindow(DisplayArea area, DeviceServices services, FullscreenPolicy policy, bool safeMode = false)
     {
         InitializeComponent();
         _services = services;
@@ -60,25 +63,49 @@ public sealed partial class BarWindow : Window, IBarSurface
         _host.ShellRestarted += (_, _) => _bar.ShellRestarted();
         _host.DpiChanged += (_, newDpi) => _bar.DpiChanged(newDpi);
         _host.DisplayTopologyChanged += (_, _) => TopologyChanged?.Invoke(this, EventArgs.Empty);
+        _host.DesktopUnavailable += (_, _) =>
+        {
+            _desktopUnavailable = true;
+            _bar.Reevaluate(Observe());
+        };
+        _host.DesktopRestored += (_, _) =>
+        {
+            _desktopUnavailable = false;
+            TopologyChanged?.Invoke(this, EventArgs.Empty);
+        };
+        if (safeMode)
+        {
+            _bar.EnterSafeMode();
+        }
+
         _bar.Attach(_hwnd, bounds, dpi);
 
         _coalescer = new QuietPeriodCoalescer(TimeProvider.System, QuietPeriod, MaxDelay,
-            () => DispatcherQueue.TryEnqueue(() => _bar.Reevaluate(Observe())));
+            () => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_closed)
+                {
+                    _bar.Reevaluate(Observe());
+                }
+            }));
         _hook = new WinEventHook();
         _hook.Changed += (_, _) => _coalescer.Signal();
 
         _clock = Timer(TimeSpan.FromSeconds(1), UpdateClock);
         _adTimer = Timer(TimeSpan.FromSeconds(config.Ads.DecisionIntervalSeconds), () => _ = RotateAdAsync());
         _weatherTimer = Timer(TimeSpan.FromSeconds(config.Weather.RefreshSeconds), () => _ = RefreshWeatherAsync());
+        _verificationTimer = Timer(TimeSpan.FromSeconds(30), _bar.Reconcile);
         UpdateClock();
         _ = RotateAdAsync();
         _ = RefreshWeatherAsync();
 
         Closed += (_, _) =>
         {
+            _closed = true;
             _clock.Stop();
             _adTimer.Stop();
             _weatherTimer.Stop();
+            _verificationTimer.Stop();
             Ad.Stop();
             _hook.Dispose();
             _coalescer.Dispose();
@@ -119,14 +146,14 @@ public sealed partial class BarWindow : Window, IBarSurface
         FullscreenObserver.Observe(
             _display,
             _windows.Snapshot(),
-            SecureDesktopProbe.IsSecureDesktopActive(),
+            _desktopUnavailable || SecureDesktopProbe.IsSecureDesktopActive(),
             _bar.Policy,
             _ => OverlayProbe.IsBarVisibleAt(_hwnd, _bar.Bounds));
 
     /// <summary>Asks for the next creative only while the bar can be seen; a hidden bar keeps what it has and claims nothing.</summary>
     private async Task RotateAdAsync()
     {
-        if (_rotating || Mode is not (DisplayMode.NormalReserved or DisplayMode.CompatibleOverlay))
+        if (_closed || _rotating || Mode is not (DisplayMode.NormalReserved or DisplayMode.CompatibleOverlay))
         {
             return;
         }
@@ -135,6 +162,11 @@ public sealed partial class BarWindow : Window, IBarSurface
         try
         {
             var resolved = await _services.Pipeline.NextAsync(_display.Key.Value, CancellationToken.None);
+            if (_closed)
+            {
+                return;
+            }
+
             var ctx = new PlaybackContext(
                 _services.DeviceId, _services.SessionId, _display.Key.Value,
                 resolved.Decision?.DecisionId, resolved.Manifest.CreativeId,
@@ -154,7 +186,7 @@ public sealed partial class BarWindow : Window, IBarSurface
     {
         var (lat, lon) = await TryLocateAsync();
         var report = await _services.GetWeatherAsync(lat, lon, CancellationToken.None);
-        if (report is null)
+        if (_closed || report is null)
         {
             return;
         }

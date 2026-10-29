@@ -53,6 +53,7 @@ public sealed class BarCoordinator
         _monitor = monitor;
         _dpi = dpi;
         Register();
+        ObserveCurrentDisplay();
     }
 
     public void Detach()
@@ -75,8 +76,33 @@ public sealed class BarCoordinator
     /// <summary>Explorer restarted (TaskbarCreated): the old registration is gone, start over.</summary>
     public void ShellRestarted()
     {
+        if (Mode == DisplayMode.CompatibleOverlay)
+        {
+            _surface.LeaveOverlay();
+        }
+
         _machine.Apply(DisplayEvent.TopologyChanged);
         Recover();
+    }
+
+    /// <summary>Bounded verification for missed shell notifications; never repeatedly forces z-order.</summary>
+    public void Reconcile()
+    {
+        if (!_attached)
+        {
+            return;
+        }
+
+        Reposition();
+        ObserveCurrentDisplay();
+    }
+
+    private void ObserveCurrentDisplay()
+    {
+        if (Observer is { } observe)
+        {
+            Reevaluate(observe());
+        }
     }
 
     public void EnterSafeMode()
@@ -155,7 +181,7 @@ public sealed class BarCoordinator
             case DisplayMode.ProtectedSurface:
                 if (!o.IsProtectedOrSecureContext && _machine.Apply(DisplayEvent.DesktopRestored))
                 {
-                    Recover();
+                    Recover(o);
                 }
 
                 break;
@@ -201,11 +227,27 @@ public sealed class BarCoordinator
         _machine.Apply(DisplayEvent.BarVerified);
     }
 
-    private void Recover()
+    private void Recover(DisplayObservation? observation = null)
     {
         Detach();
         Register();
-        _surface.BringToTop();
+        if (observation is not null)
+        {
+            Reevaluate(observation);
+        }
+        else
+        {
+            ObserveCurrentDisplay();
+        }
+
+        if (Mode == DisplayMode.NormalReserved)
+        {
+            _surface.BringToTop();
+        }
+        else if (Mode == DisplayMode.SafeMode)
+        {
+            _surface.SendToBottom();
+        }
     }
 
     private void Reposition()

@@ -155,8 +155,92 @@ public class BarCoordinatorObservationTests
 
         host.Raise(true);
 
-        Assert.Equal(1, observed);
+        Assert.Equal(2, observed); // startup also classifies before playback can begin
         Assert.Equal(DisplayMode.YieldedFullscreen, bar.Mode);
+    }
+
+    [Fact]
+    public void Recovery_does_not_raise_bar_over_a_still_fullscreen_app()
+    {
+        var (bar, _, surface) = Make();
+        bar.Observer = () => Seen(Candidate());
+        bar.Reevaluate(Seen(Candidate()));
+        surface.Calls.Clear();
+
+        bar.ShellRestarted();
+
+        Assert.Equal(DisplayMode.YieldedFullscreen, bar.Mode);
+        Assert.Equal(["bottom"], surface.Calls);
+    }
+
+    [Fact]
+    public void Unlock_into_fullscreen_yields_without_waiting_for_another_notification()
+    {
+        var (bar, _, surface) = Make();
+        bar.Reevaluate(Seen(null, secure: true));
+        surface.Calls.Clear();
+
+        bar.Reevaluate(Seen(Candidate()));
+
+        Assert.Equal(DisplayMode.YieldedFullscreen, bar.Mode);
+        Assert.Equal(["bottom"], surface.Calls);
+    }
+
+    [Fact]
+    public void Recovery_removes_old_overlay_before_applying_current_policy()
+    {
+        var (bar, _, surface) = Make(FullscreenPolicy.YieldByDefault.Allow(Chrome));
+        bar.Reevaluate(Seen(Candidate()));
+        bar.Observer = () => Seen(null);
+        surface.Calls.Clear();
+
+        bar.ShellRestarted();
+
+        Assert.Equal(DisplayMode.NormalReserved, bar.Mode);
+        Assert.Equal(["overlay-off", "top"], surface.Calls);
+    }
+
+    [Fact]
+    public void Shell_restart_cannot_clear_safe_mode()
+    {
+        var (bar, host, surface) = Make();
+        bar.EnterSafeMode();
+        bar.Observer = () => Seen(null);
+        surface.Calls.Clear();
+
+        bar.ShellRestarted();
+        bar.Reconcile();
+
+        Assert.Equal(DisplayMode.SafeMode, bar.Mode);
+        Assert.Equal(2, host.Registrations);
+        Assert.Equal(["bottom"], surface.Calls);
+        bar.AuthorizeRecovery();
+        Assert.Equal(DisplayMode.NormalReserved, bar.Mode);
+    }
+
+    [Fact]
+    public void Periodic_check_recovers_a_missed_fullscreen_end_without_repeated_z_order_changes()
+    {
+        var (bar, _, surface) = Make();
+        bar.Reevaluate(Seen(Candidate()));
+        bar.Observer = () => Seen(null);
+        surface.Calls.Clear();
+
+        bar.Reconcile();
+        bar.Reconcile();
+
+        Assert.Equal(DisplayMode.NormalReserved, bar.Mode);
+        Assert.Equal(["top"], surface.Calls);
+    }
+
+    [Fact]
+    public void Detached_bar_does_not_run_periodic_observation()
+    {
+        var (bar, _, _) = Make();
+        bar.Observer = () => throw new InvalidOperationException("closed window");
+        bar.Detach();
+
+        bar.Reconcile();
     }
 
     [Fact]

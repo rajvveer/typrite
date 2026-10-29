@@ -9,7 +9,7 @@ public sealed class DisplayTransitionEventArgs(DisplayMode from, DisplayMode to)
 
 /// <summary>
 /// One instance per display. Starts in <see cref="DisplayMode.Recovering"/> because nothing is verified at startup.
-/// <see cref="DisplayEventKind.TopologyChanged"/> and <see cref="DisplayEventKind.SafeModeRequested"/> apply from any state;
+/// Topology changes recover every state except safe mode, which requires explicit authorization;
 /// everything else follows the transition table. Events that do not apply are ignored and reported as false, because
 /// the shell is noisy and a stray notification must never corrupt state.
 /// </summary>
@@ -26,7 +26,7 @@ public sealed class DisplayStateMachine
 
         var next = e.Kind switch
         {
-            DisplayEventKind.TopologyChanged => DisplayMode.Recovering,
+            DisplayEventKind.TopologyChanged => Mode == DisplayMode.SafeMode ? null : DisplayMode.Recovering,
             DisplayEventKind.SafeModeRequested => DisplayMode.SafeMode,
             DisplayEventKind.Classified => Mode == DisplayMode.FullscreenDetected ? ValidateClassified(e) : null,
             _ => Next(Mode, e.Kind),

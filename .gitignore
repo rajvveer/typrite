@@ -24,6 +24,7 @@ TestResults/
 
 # local blob storage and tool caches
 .blobs/
+graphify-out/
 
 # artifacts
 *.msix

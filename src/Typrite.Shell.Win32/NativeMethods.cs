@@ -133,6 +133,17 @@ internal static partial class NativeMethods
     public const uint WM_DESTROY = 0x0002;
     public const uint WM_DPICHANGED = 0x02E0;
     public const uint WM_DISPLAYCHANGE = 0x007E;
+    public const uint WM_WTSSESSION_CHANGE = 0x02B1;
+    public const uint WM_POWERBROADCAST = 0x0218;
+    public const int WTS_CONSOLE_CONNECT = 0x1;
+    public const int WTS_CONSOLE_DISCONNECT = 0x2;
+    public const int WTS_REMOTE_CONNECT = 0x3;
+    public const int WTS_REMOTE_DISCONNECT = 0x4;
+    public const int WTS_SESSION_LOCK = 0x7;
+    public const int WTS_SESSION_UNLOCK = 0x8;
+    public const int PBT_APMSUSPEND = 0x4;
+    public const int PBT_APMRESUMESUSPEND = 0x7;
+    public const int PBT_APMRESUMEAUTOMATIC = 0x12;
 
     public const int GWL_STYLE = -16;
     public const long WS_CAPTION = 0x00C00000;
@@ -195,6 +206,14 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial uint RegisterWindowMessageW(string lpString);
+
+    [LibraryImport("wtsapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool WTSRegisterSessionNotification(nint hWnd, uint dwFlags);
+
+    [LibraryImport("wtsapi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool WTSUnRegisterSessionNotification(nint hWnd);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

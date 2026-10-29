@@ -16,4 +16,7 @@ public sealed record AuthOptions
     public string Issuer { get; init; } = "typrite";
 
     public int DeviceTokenMinutes { get; init; } = 30;
+
+    /// <summary>Account whose operators may manage releases and see partner reconciliation. Defaults to the seeded platform account.</summary>
+    public Guid PlatformAccountId { get; init; } = new("00000000-0000-0000-0000-000000000001");
 }

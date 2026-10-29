@@ -10,6 +10,10 @@ public static class Policies
     public const string DeviceOperator = "DeviceOperator";
     public const string ReleaseManager = "ReleaseManager";
     public const string Administrator = "Administrator";
+
+    /// <summary>Release manager or administrator of the platform account. Releases and partner reconciliation are fleet-wide, not per tenant.</summary>
+    public const string PlatformReleaseManager = "PlatformReleaseManager";
+    public const string PlatformViewer = "PlatformViewer";
 }
 
 public readonly record struct DevicePrincipal(Guid DeviceId, Guid? AccountId, string CredentialKind)

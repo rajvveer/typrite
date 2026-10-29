@@ -219,7 +219,7 @@ public static class AdminEndpoints
             AuditWriter.Record(db, time, me.Subject, me.AccountId, "release.create", $"release:{release.Id}", new { req.Version, req.CpuArchitecture });
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { id = release.Id });
-        }).RequireAuthorization(Policies.ReleaseManager);
+        }).RequireAuthorization(Policies.PlatformReleaseManager);
 
         g.MapPost("/releases/{releaseId:guid}/rollout", async (Guid releaseId, RolloutRequest req, HttpContext http, TypriteDbContext db, TimeProvider time, CancellationToken ct) =>
         {
@@ -240,7 +240,7 @@ public static class AdminEndpoints
             AuditWriter.Record(db, time, me.Subject, me.AccountId, "release.rollout", $"release:{releaseId}", new { req.Percent });
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { release.Id, status = release.Status.ToString(), release.RolloutPercent });
-        }).RequireAuthorization(Policies.ReleaseManager);
+        }).RequireAuthorization(Policies.PlatformReleaseManager);
 
         g.MapPost("/releases/{releaseId:guid}/rollback", async (Guid releaseId, HttpContext http, TypriteDbContext db, TimeProvider time, CancellationToken ct) =>
         {
@@ -256,7 +256,7 @@ public static class AdminEndpoints
             AuditWriter.Record(db, time, me.Subject, me.AccountId, "release.rollback", $"release:{releaseId}");
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { release.Id, status = release.Status.ToString() });
-        }).RequireAuthorization(Policies.ReleaseManager);
+        }).RequireAuthorization(Policies.PlatformReleaseManager);
 
         g.MapGet("/releases", async (HttpContext http, TypriteDbContext db, CancellationToken ct) =>
         {
@@ -264,7 +264,7 @@ public static class AdminEndpoints
                 .Select(r => new { r.Id, r.Version, r.CpuArchitecture, Status = r.Status.ToString(), r.RolloutPercent, r.CreatedAtUtc })
                 .ToListAsync(ct);
             return Results.Ok(new { items });
-        }).RequireAuthorization(Policies.Viewer);
+        }).RequireAuthorization(Policies.PlatformViewer);
 
         g.MapGet("/audit", async (string? resource, int? take, HttpContext http, TypriteDbContext db, CancellationToken ct) =>
         {
@@ -311,6 +311,6 @@ public static class AdminEndpoints
                 .Select(r => new { r.Id, r.PartnerId, r.PeriodStart, r.PeriodEnd, Status = r.Status.ToString(), r.OurCount, r.PartnerCount, r.MismatchSummaryJson, r.StartedAtUtc, r.FinishedAtUtc })
                 .ToListAsync(ct);
             return Results.Ok(new { items });
-        }).RequireAuthorization(Policies.Viewer);
+        }).RequireAuthorization(Policies.PlatformViewer);
     }
 }

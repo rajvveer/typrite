@@ -81,6 +81,13 @@ OperatorPolicy(Policies.DeviceOperator, "DeviceOperator", "Administrator");
 OperatorPolicy(Policies.ReleaseManager, "ReleaseManager", "Administrator");
 OperatorPolicy(Policies.Administrator, "Administrator");
 
+void PlatformPolicy(string name, params string[] roles) =>
+    authz.AddPolicy(name, p => p.AddAuthenticationSchemes("Operator").RequireAuthenticatedUser().RequireRole(roles)
+        .RequireClaim(Claims.AccountId, authOptions.PlatformAccountId.ToString()));
+
+PlatformPolicy(Policies.PlatformReleaseManager, "ReleaseManager", "Administrator");
+PlatformPolicy(Policies.PlatformViewer, "Viewer", "CampaignOperator", "DeviceOperator", "ReleaseManager", "Administrator");
+
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

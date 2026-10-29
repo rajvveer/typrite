@@ -60,6 +60,22 @@ public sealed class AdminAuthorizationTests(ApiFixture api) : IClassFixture<ApiF
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
     }
 
+    [Fact]
+    public async Task Release_management_and_reconciliation_are_platform_only()
+    {
+        var tenant = await api.CreateAccountAsync("tenant-releases");
+        var tenantReleaseMgr = await api.OperatorAsync("ReleaseManager", tenant);
+        var release = new { version = $"2.0.{Random.Shared.Next(1, 1_000_000)}", cpuArchitecture = "x64", packageSha256 = new string('c', 64), packageUrl = "https://cdn.example.com/t.msi", manifestSignature = "sig" };
+
+        var create = await tenantReleaseMgr.PostAsJsonAsync("api/v1/admin/releases", release, ContractsJson.Options);
+        var list = await tenantReleaseMgr.GetAsync("api/v1/admin/releases");
+        var recon = await tenantReleaseMgr.GetAsync("api/v1/admin/reports/reconciliation");
+
+        Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, recon.StatusCode);
+    }
+
     public sealed record CampaignList(IReadOnlyList<CampaignRow> Items);
 
     public sealed record CampaignRow(Guid Id, string Name, string Status);

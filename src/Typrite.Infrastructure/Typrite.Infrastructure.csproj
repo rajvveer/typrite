@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EF Core (PostgreSQL), blob storage, weather provider, partner adapters. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Typrite.Domain/Typrite.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Entities and pure rules: ad selection, campaign lifecycle, event validation, rollout cohorts. No EF, no HTTP. -->
+  <ItemGroup>
+    <ProjectReference Include="../Typrite.Contracts/Typrite.Contracts.csproj" />
+  </ItemGroup>
+</Project>

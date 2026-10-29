@@ -17,6 +17,11 @@ var config = builder.Configuration;
 var authOptions = config.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
 var apiOptions = config.GetSection("Api").Get<ApiOptions>() ?? new ApiOptions();
 var weatherOptions = config.GetSection("Weather").Get<WeatherOptions>() ?? new WeatherOptions();
+if (authOptions.AllowDevAuth && !(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")))
+{
+    throw new InvalidOperationException("Auth:AllowDevAuth is only permitted in the Development and Testing environments.");
+}
+
 var tokens = new TokenIssuer(authOptions, TimeProvider.System);
 var releaseSigner = new ReleaseSigner(config.GetSection("Releases").Get<ReleaseOptions>() ?? new ReleaseOptions());
 
@@ -96,6 +101,10 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("device", http => RateLimitPartition.GetFixedWindowLimiter(
         http.User.FindFirst(Claims.DeviceId)?.Value ?? http.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 600, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    // Unauthenticated identity endpoints: enough for a fleet enrolling behind one NAT, far too slow for guessing.
+    o.AddPolicy("anonymous", http => RateLimitPartition.GetFixedWindowLimiter(
+        http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
 builder.Services.AddOpenApi();
@@ -109,6 +118,11 @@ if (config.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment()
     var db = scope.ServiceProvider.GetRequiredService<TypriteDbContext>();
     await db.Database.MigrateAsync();
     await Seed.ApplyAsync(db, TimeProvider.System, CancellationToken.None);
+}
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
 }
 
 app.UseAuthentication();

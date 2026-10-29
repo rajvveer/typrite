@@ -15,6 +15,8 @@ public static class DeviceEndpoints
 
     public const long MaxDiagnosticsBytes = 20 * 1024 * 1024;
 
+    public const int MaxHealthBytes = 8 * 1024;
+
     public static void Map(IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api/v1/devices/{deviceId:guid}")
@@ -56,6 +58,11 @@ public static class DeviceEndpoints
             if (me.DeviceId != deviceId)
             {
                 return Results.Forbid();
+            }
+
+            if (req.Health is { } health && health.GetRawText().Length > MaxHealthBytes)
+            {
+                return Results.BadRequest(new { error = $"health must be at most {MaxHealthBytes} bytes" });
             }
 
             var device = await db.Devices.FirstAsync(d => d.Id == deviceId, ct);

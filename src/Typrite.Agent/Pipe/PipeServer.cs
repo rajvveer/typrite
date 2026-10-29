@@ -9,8 +9,9 @@ using Typrite.Contracts.Agent;
 namespace Typrite.Agent.Pipe;
 
 /// <summary>
-/// Local named-pipe server. On Windows the ACL lets interactive users read and write and keeps full control with the
-/// service account; the pipe is never reachable over the network.
+/// Local named-pipe server. On Windows the ACL lets interactively signed-in users read and write and keeps full
+/// control with the service account; the pipe is never reachable over the network. Any process the signed-in user
+/// runs can therefore obtain a delivery token; the server caps what such a token can claim (event ingest rules).
 /// </summary>
 public sealed class PipeServer(string pipeName, PipeRequestHandler handler)
 {
@@ -48,7 +49,8 @@ public sealed class PipeServer(string pipeName, PipeRequestHandler handler)
     private NamedPipeServerStream CreateWindows()
     {
         var security = new PipeSecurity();
-        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null), PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        // Interactive logon only: services, scheduled tasks and remote sessions get nothing from this pipe.
+        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.InteractiveSid, null), PipeAccessRights.ReadWrite, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(WindowsIdentity.GetCurrent().User!, PipeAccessRights.FullControl, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
         return NamedPipeServerStreamAcl.Create(pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,

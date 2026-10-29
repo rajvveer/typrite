@@ -19,6 +19,7 @@ public sealed class AdVisibilityTracker
     private DateTimeOffset? _visibleSince;
     private long _visibleMs;
     private int _quartilesFired;
+    private bool _observed;
 
     public AdVisibilityTracker(PlaybackContext context, TimeProvider time, Action<DeliveryEvent> emit)
     {
@@ -127,7 +128,11 @@ public sealed class AdVisibilityTracker
         }
 
         _visibleSince = _time.GetUtcNow();
-        Emit(DeliveryEventType.VisibilityObserved);
+        if (!_observed)
+        {
+            _observed = true; // one observation per playback; the server rejects more and reconciliation counts it once
+            Emit(DeliveryEventType.VisibilityObserved);
+        }
     }
 
     private void StopVisible()

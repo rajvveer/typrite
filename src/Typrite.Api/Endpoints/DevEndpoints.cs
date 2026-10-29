@@ -15,7 +15,7 @@ public static class DevEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/v1").AllowAnonymous().WithTags("Development");
+        var g = app.MapGroup("/api/v1").AllowAnonymous().RequireRateLimiting("anonymous").WithTags("Development");
 
         g.MapPost("/devices/dev-register", async (DevRegisterRequest req, TypriteDbContext db, TimeProvider time, CancellationToken ct) =>
         {

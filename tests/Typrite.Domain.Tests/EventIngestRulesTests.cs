@@ -44,6 +44,14 @@ public class EventIngestRulesTests
     }
 
     [Fact]
+    public void Implausible_durations_are_rejected()
+    {
+        Assert.NotNull(EventIngestRules.Reject(Event() with { ReportedDurationMs = -1 }, Device, Now));
+        Assert.NotNull(EventIngestRules.Reject(Event() with { ReportedDurationMs = 25L * 60 * 60 * 1000 }, Device, Now));
+        Assert.Null(EventIngestRules.Reject(Event() with { ReportedDurationMs = 30_000 }, Device, Now));
+    }
+
+    [Fact]
     public void Blank_display_key_is_rejected()
     {
         Assert.NotNull(EventIngestRules.Reject(Event(display: " "), Device, Now));

@@ -56,7 +56,8 @@
       <Component Id="DataFolderAcl" Guid="f5e4f6d8-9071-42a3-cedf-4a5b6c7d8e95">
         <CreateFolder>
           <util:PermissionEx User="NT SERVICE\Typrite.Agent" GenericAll="yes" />
-          <util:PermissionEx User="Users" GenericRead="yes" />
+          <util:PermissionEx User="Administrators" GenericAll="yes" />
+          <!-- No Users entry: claim.token, agent-state.json and update staging must not be readable by standard users. -->
         </CreateFolder>
         <RegistryValue Root="HKLM" Key="Software\Typrite" Name="DataDir" Type="string" Value="[DataDir]" KeyPath="yes" />
       </Component>

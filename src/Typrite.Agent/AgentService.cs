@@ -117,6 +117,7 @@ public sealed partial class AgentService(AgentOptions options, DeviceApiClient a
             uptimeSeconds = Environment.TickCount64 / 1000,
             workingSetMb = Environment.WorkingSet / (1024 * 1024),
             os = RuntimeInformation.OSDescription,
+            barProcesses = System.Diagnostics.Process.GetProcessesByName("Typrite.Desktop").Length, // 0 means a user closed or killed the bar
         };
         await api.HeartbeatAsync(_state.DeviceId!.Value, token, health, AppVersion, Architecture, ct).ConfigureAwait(false);
     }

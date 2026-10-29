@@ -45,7 +45,8 @@ public sealed class DeviceServices : IDisposable
             DeviceId = Credential.DeviceId;
         }
 
-        _http = new HttpClient { BaseAddress = settings.ApiBaseUrl, Timeout = TimeSpan.FromSeconds(20) };
+        // No redirects: a creative or API response must not be able to send the device somewhere else, or downgrade to http.
+        _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = settings.ApiBaseUrl, Timeout = TimeSpan.FromSeconds(20) };
         Api = new HttpDeliveryApi(_http, DeviceId, TokenAsync);
 
         _outbox = new EventOutbox(Path.Combine(dir, "events.db"), TimeProvider.System, maxCount: 50_000, maxAge: TimeSpan.FromDays(7));

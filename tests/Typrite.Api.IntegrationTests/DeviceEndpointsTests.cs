@@ -80,6 +80,40 @@ public sealed class DeviceEndpointsTests(ApiFixture api) : IClassFixture<ApiFixt
         Assert.Equal(HttpStatusCode.Conflict, c.StatusCode);
     }
 
+    [Fact]
+    public async Task Heartbeat_health_payload_is_bounded()
+    {
+        var (deviceId, client) = await api.RegisterDeviceAsync();
+        var huge = new string('x', 20_000);
+
+        var res = await client.PostAsJsonAsync($"api/v1/devices/{deviceId}/heartbeat", new { health = new { blob = huge } }, ContractsJson.Options);
+
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task Silent_devices_report_lists_heartbeating_devices_without_delivery_events()
+    {
+        var account = await api.CreateAccountAsync("silent");
+        var (quiet, quietClient) = await api.RegisterDeviceAsync(account);
+        var (active, activeClient) = await api.RegisterDeviceAsync(account);
+        foreach (var (id, c) in new[] { (quiet, quietClient), (active, activeClient) })
+        {
+            (await c.PostAsJsonAsync($"api/v1/devices/{id}/heartbeat", new { appVersion = "1" }, ContractsJson.Options)).EnsureSuccessStatusCode();
+        }
+
+        var e = new Typrite.Contracts.Delivery.DeliveryEvent(Guid.NewGuid(), active, "s", "d", null, null, Typrite.Contracts.Delivery.DeliveryEventType.AdRequested, DateTimeOffset.UtcNow, null, 1);
+        (await activeClient.PostAsJsonAsync("api/v1/events/batches", new Typrite.Contracts.Delivery.EventBatchRequest([e]), ContractsJson.Options)).EnsureSuccessStatusCode();
+
+        var op = await api.OperatorAsync("DeviceOperator", account);
+        var report = await op.GetFromJsonAsync<SilentResponse>("api/v1/admin/devices/silent?minutes=60", ContractsJson.Options);
+
+        Assert.Contains(report!.Items, d => d.Id == quiet);
+        Assert.DoesNotContain(report.Items, d => d.Id == active);
+    }
+
+    public sealed record SilentResponse(IReadOnlyList<DeviceRow> Items);
+
     public sealed record DeviceListResponse(IReadOnlyList<DeviceRow> Items, string? NextCursor);
 
     public sealed record DeviceRow(Guid Id, string Status, string? AppVersion, DateTimeOffset? LastSeenUtc);

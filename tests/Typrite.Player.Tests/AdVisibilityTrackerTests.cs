@@ -77,6 +77,23 @@ public class AdVisibilityTrackerTests
     }
 
     [Fact]
+    public void Visibility_is_observed_once_per_playback_even_across_yield_cycles()
+    {
+        var (t, time, events) = Make();
+        t.DisplayModeChanged(DisplayMode.NormalReserved);
+        t.RenderStarted();
+        time.Advance(TimeSpan.FromSeconds(1));
+        t.DisplayModeChanged(DisplayMode.YieldedFullscreen);
+        t.DisplayModeChanged(DisplayMode.NormalReserved);
+        time.Advance(TimeSpan.FromSeconds(1));
+        t.PlaybackCompleted();
+
+        Assert.Equal(1, events.Count(e => e.Type == DeliveryEventType.VisibilityObserved));
+        Assert.Equal(1, events.Count(e => e.Type == DeliveryEventType.VisibilityLost));
+        Assert.Equal(2000, t.VisibleMilliseconds);
+    }
+
+    [Fact]
     public void Quartiles_fire_once_each_in_order()
     {
         var (t, _, events) = Make(durationMs: 10_000);

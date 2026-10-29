@@ -11,7 +11,7 @@ builder.Services.AddHttpClient<DeviceApiClient>(c =>
 {
     c.BaseAddress = new Uri(options.ApiBaseUrl);
     c.Timeout = TimeSpan.FromSeconds(30);
-});
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }); // packages and tokens never follow redirects
 builder.Services.AddHostedService<AgentService>();
 
 await builder.Build().RunAsync();

@@ -64,6 +64,23 @@ public static class AdminEndpoints
             return Results.Ok(new { items, nextCursor = page.Count > size ? page[size - 1].Id.ToString() : null });
         }).RequireAuthorization(Policies.Viewer);
 
+        // A heartbeating device whose bar sends nothing is a killed, blocked or broken bar; a standard user can stop the
+        // per-user process, so the fleet must notice rather than pretend it cannot happen.
+        g.MapGet("/devices/silent", async (int? minutes, HttpContext http, TypriteDbContext db, TimeProvider time, CancellationToken ct) =>
+        {
+            var me = OperatorPrincipal.From(http.User);
+            var window = TimeSpan.FromMinutes(Math.Clamp(minutes ?? 60, 5, 7 * 24 * 60));
+            var since = time.GetUtcNow() - window;
+            var noisy = db.DeliveryEvents.AsNoTracking().Where(e => e.ReceivedAtUtc >= since).Select(e => e.DeviceId).Distinct();
+            var items = await db.Devices.AsNoTracking()
+                .Where(d => d.AccountId == me.AccountId && d.Status == DeviceStatus.Active && d.LastSeenUtc >= since && !noisy.Contains(d.Id))
+                .OrderBy(d => d.LastSeenUtc)
+                .Take(500)
+                .Select(d => new { d.Id, Status = d.Status.ToString(), d.AppVersion, d.LastSeenUtc, d.LastHealthJson })
+                .ToListAsync(ct);
+            return Results.Ok(new { windowMinutes = window.TotalMinutes, items });
+        }).RequireAuthorization(Policies.Viewer);
+
         g.MapPost("/devices/{deviceId:guid}/commands", async (Guid deviceId, IssueCommandRequest req, HttpContext http, TypriteDbContext db, TimeProvider time, CancellationToken ct) =>
         {
             if (!RemoteCommandTypes.All.Contains(req.Type))

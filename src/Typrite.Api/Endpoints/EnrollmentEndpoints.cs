@@ -20,8 +20,8 @@ public static class EnrollmentEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/v1/devices/enroll", EnrollAsync).AllowAnonymous().WithTags("Enrollment");
-        app.MapPost("/api/v1/devices/{deviceId:guid}/tokens", TokenAsync).AllowAnonymous().WithTags("Enrollment");
+        app.MapPost("/api/v1/devices/enroll", EnrollAsync).AllowAnonymous().RequireRateLimiting("anonymous").WithTags("Enrollment");
+        app.MapPost("/api/v1/devices/{deviceId:guid}/tokens", TokenAsync).AllowAnonymous().RequireRateLimiting("anonymous").WithTags("Enrollment");
         app.MapGet("/api/v1/releases/publisher-key", (ReleaseSigner signer) => Results.Text(signer.PublicKeyPem, "application/x-pem-file"))
             .AllowAnonymous().WithTags("Releases");
 

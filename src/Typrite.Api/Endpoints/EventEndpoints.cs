@@ -56,8 +56,43 @@ public static class EventEndpoints
             .Select(r => r.ClientEventId)
             .ToHashSetAsync(ct);
 
+        // Decisions referenced must have been issued to this device; counts per (decision, type) are capped so a
+        // local user holding a device token cannot fabricate impressions.
+        var decisionIds = candidates.Where(e => e.DecisionId is not null).Select(e => e.DecisionId!.Value).Distinct().ToList();
+        var ownedDecisions = await db.AdDecisions.AsNoTracking()
+            .Where(d => d.DeviceId == me.DeviceId && decisionIds.Contains(d.Id))
+            .Select(d => d.Id)
+            .ToHashSetAsync(ct);
+        var perDecisionCounts = await db.DeliveryEvents.AsNoTracking()
+            .Where(r => r.DeviceId == me.DeviceId && r.DecisionId != null && decisionIds.Contains(r.DecisionId.Value))
+            .GroupBy(r => new { r.DecisionId, r.Type })
+            .Select(g => new { g.Key.DecisionId, g.Key.Type, Count = g.Count() })
+            .ToDictionaryAsync(g => (g.DecisionId!.Value, g.Type), g => g.Count, ct);
+
         foreach (var e in candidates)
         {
+            if (e.DecisionId is { } decisionId)
+            {
+                if (!ownedDecisions.Contains(decisionId))
+                {
+                    rejected.Add(e.ClientEventId);
+                    continue;
+                }
+
+                if (!known.Contains(e.ClientEventId))
+                {
+                    var key = (decisionId, e.Type);
+                    var seen = perDecisionCounts.GetValueOrDefault(key);
+                    if (seen >= EventIngestRules.MaxPerDecision(e.Type))
+                    {
+                        rejected.Add(e.ClientEventId);
+                        continue;
+                    }
+
+                    perDecisionCounts[key] = seen + 1;
+                }
+            }
+
             if (known.Add(e.ClientEventId))
             {
                 db.DeliveryEvents.Add(new DeliveryEventRecord

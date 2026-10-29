@@ -18,12 +18,14 @@ var authOptions = config.GetSection("Auth").Get<AuthOptions>() ?? new AuthOption
 var apiOptions = config.GetSection("Api").Get<ApiOptions>() ?? new ApiOptions();
 var weatherOptions = config.GetSection("Weather").Get<WeatherOptions>() ?? new WeatherOptions();
 var tokens = new TokenIssuer(authOptions, TimeProvider.System);
+var releaseSigner = new ReleaseSigner(config.GetSection("Releases").Get<ReleaseOptions>() ?? new ReleaseOptions());
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(apiOptions);
 builder.Services.AddSingleton(weatherOptions);
 builder.Services.AddSingleton(tokens);
+builder.Services.AddSingleton(releaseSigner);
 
 builder.Services.AddDbContext<TypriteDbContext>(o => o.UseNpgsql(config.GetConnectionString("Typrite")));
 builder.Services.AddSingleton<IBlobStorage>(new FileSystemBlobStorage(config["Storage:Root"] ?? Path.Combine(AppContext.BaseDirectory, "blobs")));
@@ -120,6 +122,7 @@ if (authOptions.AllowDevAuth)
 }
 
 DeviceEndpoints.Map(app);
+EnrollmentEndpoints.Map(app);
 DeliveryEndpoints.Map(app);
 EventEndpoints.Map(app);
 WeatherEndpoints.Map(app);

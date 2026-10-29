@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <!-- Outbox dispatch, daily delivery aggregation, partner reconciliation. Runs beside the API against the same database. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Typrite.Infrastructure/Typrite.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

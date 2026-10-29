@@ -30,6 +30,7 @@ jobs:
       - run: dotnet test tests/Typrite.LocalStore.Tests --configuration Release
       - run: dotnet test tests/Typrite.Domain.Tests --configuration Release
       - run: dotnet test tests/Typrite.Api.IntegrationTests --configuration Release
+      - run: dotnet test tests/Typrite.Worker.Tests --configuration Release
 
   windows-build:
     runs-on: windows-latest

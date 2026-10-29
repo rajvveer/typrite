@@ -12,7 +12,8 @@ public sealed record WindowObservation(
     bool IsToolWindow,
     bool IsOwnWindow,
     bool IsShellWindow,
-    AppIdentity? App);
+    AppIdentity? App,
+    bool IsBorderless = false);
 
 /// <summary>What the detector observed on one display, ready for classification.</summary>
 public sealed record DisplayObservation(

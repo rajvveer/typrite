@@ -6,4 +6,9 @@ public interface IBarSurface
     void SendToBottom();
 
     void BringToTop();
+
+    /// <summary>Make the bar topmost and non-activating for a tested, allowlisted borderless app.</summary>
+    void EnterOverlay();
+
+    void LeaveOverlay();
 }

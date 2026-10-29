@@ -44,6 +44,10 @@ public class BarCoordinatorTests
         public void SendToBottom() => Calls.Add("bottom");
 
         public void BringToTop() => Calls.Add("top");
+
+        public void EnterOverlay() => Calls.Add("overlay-on");
+
+        public void LeaveOverlay() => Calls.Add("overlay-off");
     }
 
     private static (BarCoordinator Bar, FakeHost Host, FakeSurface Surface) Attached(uint dpi = 96)

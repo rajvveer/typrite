@@ -35,6 +35,14 @@ public class AppBarGeometryTests
     }
 
     [Fact]
+    public void RequestedBottomRect_accepts_physical_height_directly()
+    {
+        var rect = AppBarGeometry.RequestedBottomRect(Monitor1080p, heightPx: 263);
+
+        Assert.Equal(new PhysicalRect(0, 817, 1920, 1080), rect);
+    }
+
+    [Fact]
     public void FitHeightToAdjusted_keeps_height_when_windows_moves_rect_above_taskbar()
     {
         var adjustedByShell = new PhysicalRect(0, 0, 1920, 1032); // taskbar already took 48px

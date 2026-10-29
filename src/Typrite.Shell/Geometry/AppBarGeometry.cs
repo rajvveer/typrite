@@ -7,8 +7,14 @@ public static class AppBarGeometry
     public static PhysicalRect RequestedBottomRect(PhysicalRect monitor, double reservationDip, uint dpi)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(reservationDip, 0);
-        var height = DpiScale.DipToPhysical(reservationDip, dpi);
-        return new PhysicalRect(monitor.Left, monitor.Bottom - height, monitor.Right, monitor.Bottom);
+        return RequestedBottomRect(monitor, DpiScale.DipToPhysical(reservationDip, dpi));
+    }
+
+    /// <summary>Same as above with the height already in physical pixels.</summary>
+    public static PhysicalRect RequestedBottomRect(PhysicalRect monitor, int heightPx)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(heightPx, 0);
+        return new PhysicalRect(monitor.Left, monitor.Bottom - heightPx, monitor.Right, monitor.Bottom);
     }
 
     /// <summary>

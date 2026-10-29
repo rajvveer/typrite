@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Creative validation, bounded cache and visibility accounting. Pure; media decoding stays in the desktop app. -->
+  <ItemGroup>
+    <ProjectReference Include="../Typrite.Contracts/Typrite.Contracts.csproj" />
+    <ProjectReference Include="../Typrite.Shell/Typrite.Shell.csproj" />
+  </ItemGroup>
+</Project>

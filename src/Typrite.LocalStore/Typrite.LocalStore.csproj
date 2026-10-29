@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SQLite store-and-forward event queue and on-disk creative store, per Windows user profile. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Typrite.Contracts/Typrite.Contracts.csproj" />
+    <ProjectReference Include="../Typrite.Player/Typrite.Player.csproj" />
+  </ItemGroup>
+</Project>

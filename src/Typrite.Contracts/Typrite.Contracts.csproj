@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Versioned DTOs shared by device, agent, API and worker. No behaviour beyond validation helpers. -->
+</Project>

@@ -13,6 +13,8 @@ public static class DeviceEndpoints
 
     public sealed record AckRequest(JsonElement? Result);
 
+    public const long MaxDiagnosticsBytes = 20 * 1024 * 1024;
+
     public static void Map(IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api/v1/devices/{deviceId:guid}")
@@ -89,6 +91,25 @@ public static class DeviceEndpoints
                 .Select(c => new { c.Id, c.Type, c.PayloadJson, c.ExpiresAtUtc });
             return Results.Ok(new { items });
         });
+
+        g.MapPost("/diagnostics", async (Guid deviceId, IFormFile file, HttpContext http, Typrite.Infrastructure.Storage.IBlobStorage blobs, TimeProvider time, CancellationToken ct) =>
+        {
+            if (DevicePrincipal.From(http.User).DeviceId != deviceId)
+            {
+                return Results.Forbid();
+            }
+
+            if (file.Length is <= 0 or > MaxDiagnosticsBytes)
+            {
+                return Results.BadRequest(new { error = $"diagnostics must be 1..{MaxDiagnosticsBytes} bytes" });
+            }
+
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var key = $"diagnostics/{deviceId:N}/{time.GetUtcNow():yyyyMMddHHmmss}.zip";
+            await blobs.PutAsync(key, ms.ToArray(), "application/zip", ct);
+            return Results.Ok(new { key, bytes = ms.Length });
+        }).DisableAntiforgery();
 
         g.MapPost("/commands/{commandId:guid}/ack", async (Guid deviceId, Guid commandId, AckRequest req, HttpContext http, TypriteDbContext db, TimeProvider time, CancellationToken ct) =>
         {

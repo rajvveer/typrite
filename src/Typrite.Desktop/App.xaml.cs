@@ -11,6 +11,7 @@ public partial class App : Application
     private DeviceServices? _services;
     private Mutex? _singleInstance;
     private DispatcherQueueTimer? _rebuildTimer;
+    private DispatcherQueueTimer? _commandTimer;
     private bool _rebuilding;
 
     /// <summary>Overlay allowlist. Empty until an app has passed the physical overlay test; later fed from device policy.</summary>
@@ -35,6 +36,39 @@ public partial class App : Application
         _services = new DeviceServices(DesktopSettings.Load(), DispatcherQueue.GetForCurrentThread());
         CreateBars();
         _ = ConnectAsync(_services);
+
+        _commandTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+        _commandTimer.Interval = TimeSpan.FromSeconds(10);
+        _commandTimer.Tick += async (_, _) => await ApplyAgentCommandsAsync();
+        _commandTimer.Start();
+    }
+
+    /// <summary>Commands arrive through the agent, which already authenticated and audited them server-side.</summary>
+    private async Task ApplyAgentCommandsAsync()
+    {
+        if (_services is null)
+        {
+            return;
+        }
+
+        while (await _services.TryNextAgentCommandAsync(CancellationToken.None) is { } command)
+        {
+            switch (command)
+            {
+                case "enter-safe-mode":
+                    _bars.ForEach(b => b.EnterSafeMode());
+                    break;
+                case "leave-safe-mode":
+                    _bars.ForEach(b => b.AuthorizeRecovery());
+                    break;
+                case "restart-bar":
+                    RebuildBars();
+                    break;
+                case "refresh-configuration":
+                    await _services.RefreshConfigurationAsync(CancellationToken.None);
+                    break;
+            }
+        }
     }
 
     /// <summary>Bars render from cached state immediately; registration and policy arrive in the background.</summary>

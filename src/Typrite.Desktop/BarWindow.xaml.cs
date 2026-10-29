@@ -94,6 +94,10 @@ public sealed partial class BarWindow : Window, IBarSurface
 
     public DisplayKey DisplayKey => _display.Key;
 
+    public void EnterSafeMode() => _bar.EnterSafeMode();
+
+    public void AuthorizeRecovery() => _bar.AuthorizeRecovery();
+
     void IBarSurface.SendToBottom() => WindowZOrder.SendToBottom(_hwnd);
 
     void IBarSurface.BringToTop() => WindowZOrder.BringToTop(_hwnd);
@@ -132,7 +136,7 @@ public sealed partial class BarWindow : Window, IBarSurface
         {
             var resolved = await _services.Pipeline.NextAsync(_display.Key.Value, CancellationToken.None);
             var ctx = new PlaybackContext(
-                _services.Credential.DeviceId, _services.SessionId, _display.Key.Value,
+                _services.DeviceId, _services.SessionId, _display.Key.Value,
                 resolved.Decision?.DecisionId, resolved.Manifest.CreativeId,
                 _services.Configuration.ConfigurationVersion, resolved.Manifest.DurationMs);
             var tracker = new AdVisibilityTracker(ctx, TimeProvider.System, _services.Record);

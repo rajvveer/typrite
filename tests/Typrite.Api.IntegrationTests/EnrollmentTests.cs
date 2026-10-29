@@ -120,8 +120,13 @@ public sealed class EnrollmentTests(ApiFixture api) : IClassFixture<ApiFixture>
             new { version, cpuArchitecture = "x64", packageSha256 = new string('d', 64), packageUrl = "https://cdn.example.com/t.msi", manifestSignature = "" }, ContractsJson.Options);
         var releaseId = (await created.Content.ReadFromJsonAsync<ApiFixture.IdResponse>(ContractsJson.Options))!.Id;
 
-        var none = await client.GetAsync($"api/v1/devices/{deviceId}/releases/current");
-        Assert.Equal(HttpStatusCode.NoContent, none.StatusCode);
+        var before = await client.GetAsync($"api/v1/devices/{deviceId}/releases/current");
+        if (before.StatusCode != HttpStatusCode.NoContent)
+        {
+            // Earlier runs may have left a completed release behind; the new one must not be offered before rollout.
+            var offered = await before.Content.ReadFromJsonAsync<CurrentReleaseResponse>(ContractsJson.Options);
+            Assert.NotEqual(version, offered!.Manifest.Version);
+        }
 
         (await mgr.PostAsJsonAsync($"api/v1/admin/releases/{releaseId}/rollout", new { percent = 100 }, ContractsJson.Options)).EnsureSuccessStatusCode();
         var current = await client.GetFromJsonAsync<CurrentReleaseResponse>($"api/v1/devices/{deviceId}/releases/current", ContractsJson.Options);

@@ -61,6 +61,28 @@ public sealed class CommandAndWeatherTests(ApiFixture api) : IClassFixture<ApiFi
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
     }
 
+    [Fact]
+    public async Task Diagnostics_zip_is_accepted_from_the_device_and_rejected_when_oversized()
+    {
+        var (deviceId, device) = await api.RegisterDeviceAsync();
+        byte[] zip = [0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(zip);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+        form.Add(file, "file", "d.zip");
+        var ok = await device.PostAsync($"api/v1/devices/{deviceId}/diagnostics", form);
+
+        using var big = new MultipartFormDataContent();
+        var bigFile = new ByteArrayContent(new byte[21 * 1024 * 1024]);
+        bigFile.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+        big.Add(bigFile, "file", "d.zip");
+        var tooBig = await device.PostAsync($"api/v1/devices/{deviceId}/diagnostics", big);
+
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, tooBig.StatusCode);
+    }
+
     public sealed record CommandList(IReadOnlyList<CommandRow> Items);
 
     public sealed record CommandRow(Guid Id, string Type, string? PayloadJson, DateTimeOffset ExpiresAtUtc);

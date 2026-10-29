@@ -18,6 +18,7 @@ public sealed class DeviceServices : IDisposable
     private static readonly TimeSpan UploadInitialBackoff = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan UploadMaxBackoff = TimeSpan.FromMinutes(5);
 
+    private readonly AgentPipeClient _agent = new();
     private readonly HttpClient _http;
     private readonly EventOutbox _outbox;
     private readonly CreativeCache _cache;
@@ -28,12 +29,24 @@ public sealed class DeviceServices : IDisposable
     public DeviceServices(DesktopSettings settings, DispatcherQueue dispatcher)
     {
         var dir = DesktopSettings.DataDirectory;
-        Credential = DevDeviceCredential.LoadOrCreate(dir);
         SessionId = Guid.NewGuid().ToString("N");
         Configuration = DeviceConfiguration.Default;
 
+        // Prefer the agent's enrolled identity and brokered tokens; fall back to the development credential (guide section 3).
+        var agentIdentity = _agent.TryIdentityAsync(CancellationToken.None).GetAwaiter().GetResult();
+        if (agentIdentity is not null)
+        {
+            UsesAgent = true;
+            DeviceId = agentIdentity.DeviceId;
+        }
+        else
+        {
+            Credential = DevDeviceCredential.LoadOrCreate(dir);
+            DeviceId = Credential.DeviceId;
+        }
+
         _http = new HttpClient { BaseAddress = settings.ApiBaseUrl, Timeout = TimeSpan.FromSeconds(20) };
-        Api = new HttpDeliveryApi(_http, Credential.DeviceId, _ => ValueTask.FromResult(Credential.Secret));
+        Api = new HttpDeliveryApi(_http, DeviceId, TokenAsync);
 
         _outbox = new EventOutbox(Path.Combine(dir, "events.db"), TimeProvider.System, maxCount: 50_000, maxAge: TimeSpan.FromDays(7));
         _cache = new CreativeCache(new FileCreativeStore(Path.Combine(dir, "creatives")), Configuration.Ads.CacheMaxMb * 1024L * 1024L);
@@ -45,7 +58,7 @@ public sealed class DeviceServices : IDisposable
                 Convert.ToHexStringLower(SHA256.HashData(houseBytes)), null, new Uri("https://local/house-400x225.png"), null),
             houseBytes);
         Pipeline = new AdDeliveryPipeline(Api, _cache, CreativePolicy.Default, house,
-            new DeviceContext(Credential.DeviceId, SessionId, Configuration.ConfigurationVersion), TimeProvider.System, Record);
+            new DeviceContext(DeviceId, SessionId, Configuration.ConfigurationVersion), TimeProvider.System, Record);
 
         _uploadTimer = dispatcher.CreateTimer();
         _uploadTimer.Interval = UploadInterval;
@@ -53,7 +66,12 @@ public sealed class DeviceServices : IDisposable
         _uploadTimer.Start();
     }
 
-    public DevDeviceCredential Credential { get; }
+    /// <summary>Development credential; null when the agent provides identity and tokens.</summary>
+    public DevDeviceCredential? Credential { get; }
+
+    public Guid DeviceId { get; }
+
+    public bool UsesAgent { get; }
 
     public string SessionId { get; }
 
@@ -68,16 +86,34 @@ public sealed class DeviceServices : IDisposable
 
     public async Task RegisterDevAsync(CancellationToken ct)
     {
+        if (Credential is null)
+        {
+            return;
+        }
+
         using var res = await _http.PostAsJsonAsync("api/v1/devices/dev-register",
             new { deviceId = Credential.DeviceId, secret = Credential.Secret, appVersion = typeof(App).Assembly.GetName().Version?.ToString() },
             ContractsJson.Options, ct);
         res.EnsureSuccessStatusCode();
     }
 
+    /// <summary>Next command the agent is holding for the desktop, if any.</summary>
+    public Task<string?> TryNextAgentCommandAsync(CancellationToken ct) => _agent.TryNextCommandAsync(ct);
+
+    private async ValueTask<string> TokenAsync(CancellationToken ct)
+    {
+        if (UsesAgent)
+        {
+            return await _agent.TryTokenAsync(ct) ?? throw new HttpRequestException("agent did not provide a device token");
+        }
+
+        return Credential!.Secret;
+    }
+
     public async Task RefreshConfigurationAsync(CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, $"api/v1/devices/{Credential.DeviceId}/configuration");
-        req.Headers.Authorization = new("Bearer", Credential.Secret);
+        using var req = new HttpRequestMessage(HttpMethod.Get, $"api/v1/devices/{DeviceId}/configuration");
+        req.Headers.Authorization = new("Bearer", await TokenAsync(ct));
         using var res = await _http.SendAsync(req, ct);
         if (res.IsSuccessStatusCode)
         {
@@ -91,7 +127,7 @@ public sealed class DeviceServices : IDisposable
             ? $"api/v1/weather?lat={Math.Round(la, 2)}&lon={Math.Round(lo, 2)}"
             : "api/v1/weather";
         using var req = new HttpRequestMessage(HttpMethod.Get, query);
-        req.Headers.Authorization = new("Bearer", Credential.Secret);
+        req.Headers.Authorization = new("Bearer", await TokenAsync(ct));
         using var res = await _http.SendAsync(req, ct);
         return res.IsSuccessStatusCode ? await res.Content.ReadFromJsonAsync<WeatherReport>(ContractsJson.Options, ct) : null;
     }

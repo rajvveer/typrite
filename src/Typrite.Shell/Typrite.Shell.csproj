@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure logic: geometry, fullscreen classification, per-display state machine. No Windows dependencies. -->
+</Project>

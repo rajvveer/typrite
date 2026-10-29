@@ -6,14 +6,30 @@ on:
   pull_request:
 
 jobs:
-  shell-logic:
+  logic-and-api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: typrite
+          POSTGRES_PASSWORD: typrite
+          POSTGRES_DB: typrite_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U typrite" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TYPRITE_TEST_PG: Host=localhost;Database=typrite_test;Username=typrite;Password=typrite
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
       - run: dotnet test tests/Typrite.Shell.Tests --configuration Release
+      - run: dotnet test tests/Typrite.Player.Tests --configuration Release
+      - run: dotnet test tests/Typrite.LocalStore.Tests --configuration Release
+      - run: dotnet test tests/Typrite.Domain.Tests --configuration Release
+      - run: dotnet test tests/Typrite.Api.IntegrationTests --configuration Release
 
   windows-build:
     runs-on: windows-latest

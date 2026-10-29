@@ -22,6 +22,9 @@ TestResults/
 *.md
 !README.md
 
+# local blob storage and tool caches
+.blobs/
+
 # artifacts
 *.msix
 *.msi

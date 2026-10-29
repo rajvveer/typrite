@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Typrite.Infrastructure/Typrite.Infrastructure.csproj" />
+    <ProjectReference Include="../Typrite.Player/Typrite.Player.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Typrite.Api.IntegrationTests" />

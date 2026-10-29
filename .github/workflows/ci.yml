@@ -22,4 +22,6 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - run: dotnet build Typrite.sln --configuration Release -p:Platform=x64
+      - run: dotnet test tests/Typrite.Shell.Tests --configuration Release
+      - run: dotnet build src/Typrite.Shell.Win32 --configuration Release
+      - run: dotnet build src/Typrite.Desktop --configuration Release -p:Platform=x64

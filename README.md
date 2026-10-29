@@ -14,11 +14,16 @@ Windows 11 desktop bar that reserves a strip of workspace (clock, weather, ad re
 ## Build
 
 ```sh
-dotnet test                      # Shell logic, any OS
-dotnet build Typrite.sln         # full solution, Windows 11 x64 only
+dotnet test tests/Typrite.Shell.Tests                     # any OS
+dotnet build src/Typrite.Shell.Win32                      # any OS (Windows targeting enabled)
+dotnet build src/Typrite.Desktop -p:Platform=x64          # Windows only
 ```
 
 Requires .NET 10 SDK. The Desktop project needs Windows App SDK 2.6.4 and must be smoke-tested on a physical Windows machine; CI compiles it but cannot validate shell behaviour.
+
+## Status
+
+P1 (native bar proof): bar window per display, AppBar registration, yield on `ABN_FULLSCREENAPP`, re-register on Explorer restart, DPI change handling, clock. Weather and ad regions are placeholders. Not yet verified on physical Windows hardware.
 
 ## Rules
 

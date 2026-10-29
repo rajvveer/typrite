@@ -2,6 +2,10 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Typrite.Shell", "src\Typrite.Shell\Typrite.Shell.csproj", "{A1000000-0000-4000-8000-000000000001}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Typrite.Shell.Win32", "src\Typrite.Shell.Win32\Typrite.Shell.Win32.csproj", "{A1000000-0000-4000-8000-000000000003}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Typrite.Desktop", "src\Typrite.Desktop\Typrite.Desktop.csproj", "{A1000000-0000-4000-8000-000000000004}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Typrite.Shell.Tests", "tests\Typrite.Shell.Tests\Typrite.Shell.Tests.csproj", "{A1000000-0000-4000-8000-000000000002}"
 EndProject
 Global
@@ -18,5 +22,13 @@ Global
 		{A1000000-0000-4000-8000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1000000-0000-4000-8000-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1000000-0000-4000-8000-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1000000-0000-4000-8000-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1000000-0000-4000-8000-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1000000-0000-4000-8000-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1000000-0000-4000-8000-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1000000-0000-4000-8000-000000000004}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{A1000000-0000-4000-8000-000000000004}.Debug|Any CPU.Build.0 = Debug|x64
+		{A1000000-0000-4000-8000-000000000004}.Release|Any CPU.ActiveCfg = Release|x64
+		{A1000000-0000-4000-8000-000000000004}.Release|Any CPU.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal

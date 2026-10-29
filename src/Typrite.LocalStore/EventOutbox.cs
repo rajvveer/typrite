@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Typrite.Contracts;
 using Typrite.Contracts.Delivery;
+using Typrite.Player.Delivery;
 
 namespace Typrite.LocalStore;
 
@@ -10,7 +11,7 @@ namespace Typrite.LocalStore;
 /// Store-and-forward queue for delivery events. Bounded by count and age; drops are counted and persisted
 /// so the device can report loss honestly instead of silently.
 /// </summary>
-public sealed class EventOutbox : IDisposable
+public sealed class EventOutbox : IEventOutbox, IDisposable
 {
     private readonly SqliteConnection _db;
     private readonly TimeProvider _time;

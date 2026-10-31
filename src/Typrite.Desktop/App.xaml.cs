@@ -2,6 +2,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Typrite.Shell.Fullscreen;
+using Typrite.Shell.Win32;
 
 namespace Typrite.Desktop;
 
@@ -15,11 +16,17 @@ public partial class App : Application
     private bool _rebuilding;
     private bool _safeMode;
     private bool _taskbarDemo;
+    private ExplorerTaskbarSession? _explorerTaskbar;
 
     /// <summary>Overlay allowlist. Empty until an app has passed the physical overlay test; later fed from device policy.</summary>
     private FullscreenPolicy _policy = FullscreenPolicy.YieldByDefault;
 
-    public App() => InitializeComponent();
+    public App()
+    {
+        InitializeComponent();
+        UnhandledException += (_, _) => _explorerTaskbar?.Dispose();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => _explorerTaskbar?.Dispose();
+    }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -37,7 +44,20 @@ public partial class App : Application
         _rebuildTimer.Tick += (_, _) => RebuildBars();
 
         _services = new DeviceServices(DesktopSettings.Load(), DispatcherQueue.GetForCurrentThread());
-        CreateBars();
+        try
+        {
+            if (_taskbarDemo)
+            {
+                _explorerTaskbar = new ExplorerTaskbarSession();
+            }
+
+            CreateBars();
+        }
+        catch
+        {
+            _explorerTaskbar?.Dispose();
+            throw;
+        }
         _ = ConnectAsync(_services);
 
         _commandTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
@@ -60,10 +80,17 @@ public partial class App : Application
             {
                 case "enter-safe-mode":
                     _safeMode = true;
+                    _explorerTaskbar?.Dispose();
+                    _explorerTaskbar = null;
                     _bars.ForEach(b => b.EnterSafeMode());
                     break;
                 case "leave-safe-mode":
                     _safeMode = false;
+                    if (_taskbarDemo && _explorerTaskbar is null)
+                    {
+                        _explorerTaskbar = new ExplorerTaskbarSession();
+                    }
+
                     _bars.ForEach(b => b.AuthorizeRecovery());
                     break;
                 case "restart-bar":
@@ -95,6 +122,7 @@ public partial class App : Application
         foreach (var area in DisplayArea.FindAll())
         {
             var bar = new BarWindow(area, _services!, _policy, _safeMode, _taskbarDemo);
+            bar.ShellRestarted += (_, _) => _explorerTaskbar?.Suppress();
             bar.DemoExitRequested += (_, _) =>
             {
                 foreach (var openBar in _bars.ToArray())
@@ -108,6 +136,7 @@ public partial class App : Application
                 _bars.Remove(bar);
                 if (_bars.Count == 0 && !_rebuilding)
                 {
+                    _explorerTaskbar?.Dispose();
                     Exit();
                 }
             };
@@ -128,7 +157,13 @@ public partial class App : Application
             }
 
             _bars.Clear();
+            _explorerTaskbar?.Suppress();
             CreateBars();
+        }
+        catch
+        {
+            _explorerTaskbar?.Dispose();
+            throw;
         }
         finally
         {

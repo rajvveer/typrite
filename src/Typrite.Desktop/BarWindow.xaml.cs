@@ -68,7 +68,11 @@ public sealed partial class BarWindow : Window, IBarSurface
         var reservationDip = config.Layout.ReservationDip + (taskbarDemo ? DemoTaskbar.HeightDip : 0);
         _bar = new BarCoordinator(_host, this, reservationDip) { Policy = policy, Observer = Observe };
         _bar.ModeChanged += (_, mode) => _tracker?.DisplayModeChanged(mode);
-        _host.ShellRestarted += (_, _) => _bar.ShellRestarted();
+        _host.ShellRestarted += (_, _) =>
+        {
+            ShellRestarted?.Invoke(this, EventArgs.Empty);
+            _bar.ShellRestarted();
+        };
         _host.DpiChanged += (_, newDpi) => _bar.DpiChanged(newDpi);
         _host.DisplayTopologyChanged += (_, _) => TopologyChanged?.Invoke(this, EventArgs.Empty);
         _host.DesktopUnavailable += (_, _) =>
@@ -126,6 +130,8 @@ public sealed partial class BarWindow : Window, IBarSurface
     public event EventHandler? TopologyChanged;
 
     public event EventHandler? DemoExitRequested;
+
+    public event EventHandler? ShellRestarted;
 
     public DisplayMode Mode => _bar.Mode;
 

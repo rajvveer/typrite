@@ -122,6 +122,9 @@ internal static partial class NativeMethods
     public const uint ABM_SETPOS = 0x3;
     public const uint ABM_ACTIVATE = 0x6;
     public const uint ABM_WINDOWPOSCHANGED = 0x9;
+    public const uint ABM_GETSTATE = 0x4;
+    public const uint ABM_SETSTATE = 0xA;
+    public const uint ABS_AUTOHIDE = 0x1;
 
     public const int ABN_POSCHANGED = 0x1;
     public const int ABN_FULLSCREENAPP = 0x2;
@@ -261,6 +264,10 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ShowWindowAsync(nint hWnd, int nCmdShow);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ShowWindow(nint hWnd, int nCmdShow);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -4,7 +4,7 @@ For a hosted API + React demo using Neon, see [deployment setup](deploy/README.m
 
 Windows 11 desktop bar that reserves a strip of workspace (clock, weather, ad region) via the Win32 AppBar API, yields to full-screen apps, and reports visibility honestly.
 
-For the optional Windows-style navigation demo, start `Typrite.Desktop.exe --taskbar-demo`. See [demo setup and limitations](docs/taskbar-demo/README.md); this mode does not replace Explorer or enforce kiosk restrictions.
+For the optional Windows-style navigation demo, start `Typrite.Desktop.exe --taskbar-demo`. It temporarily hides the Windows taskbars and restores them on normal exit. See [demo setup and limitations](docs/taskbar-demo/README.md); this mode does not replace Explorer or enforce kiosk restrictions.
 
 ## Layout
 

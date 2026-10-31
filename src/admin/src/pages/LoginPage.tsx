@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { ROLES, devLogin, type Role } from "../auth";
+import { ROLES, allowDevAuth, canSignIn, devLogin, initializationError, signIn, type Role } from "../auth";
 import { describeError } from "../api";
 import { navigate } from "../router";
 import { ErrorText } from "./shared";
@@ -8,7 +8,7 @@ export function LoginPage(): ReactNode {
   const [subject, setSubject] = useState<string>("");
   const [role, setRole] = useState<Role>("Viewer");
   const [accountId, setAccountId] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initializationError);
   const [busy, setBusy] = useState<boolean>(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -16,6 +16,11 @@ export function LoginPage(): ReactNode {
     setError(null);
     setBusy(true);
     try {
+      if (!allowDevAuth) {
+        await signIn();
+        return;
+      }
+
       const trimmedAccount = accountId.trim();
       await devLogin(
         trimmedAccount.length > 0
@@ -32,11 +37,12 @@ export function LoginPage(): ReactNode {
 
   return (
     <section className="login">
-      <h1>Development sign-in</h1>
+      <h1>{allowDevAuth ? "Development sign-in" : "Operator sign-in"}</h1>
       <p className="muted">
-        Exchanges a subject and role for a development JWT. This form will be replaced by OIDC in production.
+        {allowDevAuth ? "Local development access." : "Sign in with your organization's account."}
       </p>
       <form onSubmit={(e) => void onSubmit(e)} aria-describedby={error !== null ? "login-error" : undefined}>
+        {allowDevAuth && <>
         <div className="field">
           <label htmlFor="login-subject">Subject</label>
           <input
@@ -69,8 +75,9 @@ export function LoginPage(): ReactNode {
             onChange={(e) => setAccountId(e.target.value)}
           />
         </div>
+        </>}
         <ErrorText error={error} id="login-error" />
-        <button type="submit" disabled={busy}>
+        <button type="submit" disabled={busy || !canSignIn()}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>

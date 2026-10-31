@@ -1,4 +1,4 @@
-# Local backend: PostgreSQL + API + worker. The Windows desktop app and agent run on a Windows host and point at https://localhost:7210.
+# Local HTTP API/dashboard only. For the Windows HTTPS demo, run just postgres here and launch the API with dotnet run.
 services:
   postgres:
     image: postgres:18
@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: typrite
       POSTGRES_PASSWORD: typrite
       POSTGRES_DB: typrite
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U typrite"]
@@ -22,10 +22,10 @@ services:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       ConnectionStrings__Typrite: Host=postgres;Database=typrite;Username=typrite;Password=typrite
       Auth__AllowDevAuth: "true"
-      Api__PublicBaseUrl: https://localhost:7210
+      Api__PublicBaseUrl: http://localhost:7210
       Storage__Root: /data/blobs
       Database__MigrateOnStartup: "true"
-    ports: ["7210:8080"]
+    ports: ["127.0.0.1:7210:8080"]
     volumes: [blobs:/data/blobs]
 
   worker:

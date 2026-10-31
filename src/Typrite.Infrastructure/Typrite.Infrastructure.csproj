@@ -2,6 +2,7 @@
   <!-- EF Core (PostgreSQL), blob storage, weather provider, partner adapters. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>

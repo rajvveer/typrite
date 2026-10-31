@@ -13,6 +13,10 @@ public sealed record AuthOptions
 
     public string? OperatorAudience { get; init; }
 
+    public string? OperatorClientId { get; init; }
+
+    public string OperatorScopes { get; init; } = "openid profile";
+
     public string Issuer { get; init; } = "typrite";
 
     public int DeviceTokenMinutes { get; init; } = 30;

@@ -1,7 +1,9 @@
 using System.Text.Json.Serialization;
+using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Typrite.Api;
 using Typrite.Api.Auth;
@@ -11,7 +13,8 @@ using Typrite.Infrastructure.Persistence;
 using Typrite.Infrastructure.Storage;
 using Typrite.Infrastructure.Weather;
 
-var builder = WebApplication.CreateBuilder(args);
+var migrateOnly = args.Contains("--migrate-only", StringComparer.Ordinal);
+var builder = WebApplication.CreateBuilder(args.Where(a => a != "--migrate-only").ToArray());
 var config = builder.Configuration;
 
 var authOptions = config.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
@@ -22,8 +25,14 @@ if (authOptions.AllowDevAuth && !(builder.Environment.IsDevelopment() || builder
     throw new InvalidOperationException("Auth:AllowDevAuth is only permitted in the Development and Testing environments.");
 }
 
+var releaseOptions = config.GetSection("Releases").Get<ReleaseOptions>() ?? new ReleaseOptions();
+if (!(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")))
+{
+    ProductionConfiguration.Validate(config, authOptions, apiOptions, releaseOptions);
+}
+
 var tokens = new TokenIssuer(authOptions, TimeProvider.System);
-var releaseSigner = new ReleaseSigner(config.GetSection("Releases").Get<ReleaseOptions>() ?? new ReleaseOptions());
+var releaseSigner = new ReleaseSigner(releaseOptions);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(authOptions);
@@ -33,7 +42,9 @@ builder.Services.AddSingleton(tokens);
 builder.Services.AddSingleton(releaseSigner);
 
 builder.Services.AddDbContext<TypriteDbContext>(o => o.UseNpgsql(config.GetConnectionString("Typrite")));
-builder.Services.AddSingleton<IBlobStorage>(new FileSystemBlobStorage(config["Storage:Root"] ?? Path.Combine(AppContext.BaseDirectory, "blobs")));
+var storageRoot = config["Storage:Root"];
+builder.Services.AddSingleton<IBlobStorage>(new FileSystemBlobStorage(string.IsNullOrWhiteSpace(storageRoot)
+    ? Path.Combine(AppContext.BaseDirectory, "blobs") : storageRoot));
 builder.Services.AddSingleton<IAdPartner, MockAdPartner>();
 
 if (weatherOptions.Provider.Equals("mock", StringComparison.OrdinalIgnoreCase))
@@ -80,7 +91,8 @@ var authz = builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Device, p => p.AddAuthenticationSchemes(DeviceAuthenticationHandler.SchemeName).RequireAuthenticatedUser().RequireClaim(Claims.DeviceId));
 
 void OperatorPolicy(string name, params string[] roles) =>
-    authz.AddPolicy(name, p => p.AddAuthenticationSchemes("Operator").RequireAuthenticatedUser().RequireClaim(Claims.AccountId).RequireRole(roles));
+    authz.AddPolicy(name, p => p.AddAuthenticationSchemes("Operator").RequireAuthenticatedUser()
+        .RequireAssertion(context => Guid.TryParse(context.User.FindFirst(Claims.AccountId)?.Value, out _)).RequireRole(roles));
 
 OperatorPolicy(Policies.Viewer, "Viewer", "CampaignOperator", "DeviceOperator", "ReleaseManager", "Administrator");
 OperatorPolicy(Policies.CampaignOperator, "CampaignOperator", "Administrator");
@@ -109,10 +121,18 @@ builder.Services.AddRateLimiter(o =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddAntiforgery();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    foreach (var proxy in config.GetSection("Proxy:KnownProxies").Get<string[]>() ?? [])
+    {
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
+});
 
 var app = builder.Build();
 
-if (config.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing")))
+if (migrateOnly || config.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing")))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<TypriteDbContext>();
@@ -120,11 +140,20 @@ if (config.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment()
     await Seed.ApplyAsync(db, TimeProvider.System, CancellationToken.None);
 }
 
+if (migrateOnly)
+{
+    await app.DisposeAsync();
+    return;
+}
+
+app.UseForwardedHeaders();
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
@@ -136,12 +165,16 @@ if (authOptions.AllowDevAuth)
 }
 
 DeviceEndpoints.Map(app);
+AuthEndpoints.Map(app);
 EnrollmentEndpoints.Map(app);
 DeliveryEndpoints.Map(app);
 EventEndpoints.Map(app);
 WeatherEndpoints.Map(app);
 AdminEndpoints.Map(app);
-app.MapOpenApi();
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+{
+    app.MapOpenApi();
+}
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
 app.Run();

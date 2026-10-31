@@ -14,6 +14,7 @@ public partial class App : Application
     private DispatcherQueueTimer? _commandTimer;
     private bool _rebuilding;
     private bool _safeMode;
+    private bool _taskbarDemo;
 
     /// <summary>Overlay allowlist. Empty until an app has passed the physical overlay test; later fed from device policy.</summary>
     private FullscreenPolicy _policy = FullscreenPolicy.YieldByDefault;
@@ -22,6 +23,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        _taskbarDemo = Environment.GetCommandLineArgs().Contains("--taskbar-demo", StringComparer.Ordinal);
         _singleInstance = new Mutex(initiallyOwned: true, @"Local\Typrite.Desktop", out var createdNew);
         if (!createdNew)
         {
@@ -92,7 +94,14 @@ public partial class App : Application
     {
         foreach (var area in DisplayArea.FindAll())
         {
-            var bar = new BarWindow(area, _services!, _policy, _safeMode);
+            var bar = new BarWindow(area, _services!, _policy, _safeMode, _taskbarDemo);
+            bar.DemoExitRequested += (_, _) =>
+            {
+                foreach (var openBar in _bars.ToArray())
+                {
+                    openBar.Close();
+                }
+            };
             bar.TopologyChanged += (_, _) => _rebuildTimer?.Start();
             bar.Closed += (_, _) =>
             {

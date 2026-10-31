@@ -1,0 +1,16 @@
+.git
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/TestResults
+**/test-results
+**/playwright-report
+graphify-out
+.blobs
+**/.env*
+**/*.local.json
+**/*.pfx
+**/*.pem
+**/*.key
+**/claim.token

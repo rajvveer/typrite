@@ -1,6 +1,4 @@
-// All authentication lives here. Today this is a development sign-in that
-// exchanges {subject, role} for a JWT; in production this module is the only
-// thing that should change when OIDC replaces it.
+import { InMemoryWebStorage, UserManager, WebStorageStateStore } from "oidc-client-ts";
 
 export const ROLES = [
   "Viewer",
@@ -20,6 +18,77 @@ export interface Session {
 }
 
 const STORAGE_KEY = "typrite.admin.session";
+let oidc: UserManager | null = null;
+export let allowDevAuth = false;
+export let initializationError: string | null = null;
+
+export function canSignIn(): boolean {
+  return allowDevAuth || oidc !== null;
+}
+
+async function validateOperatorSession(token: string): Promise<void> {
+  const response = await fetch("/api/v1/admin/session", {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new AuthError("Your session is invalid or you do not have operator access. Please sign in again.");
+  const profile: unknown = await response.json();
+  if (typeof profile !== "object" || profile === null) throw new AuthError("Invalid operator profile.");
+  const session = parseSession(JSON.stringify({ ...profile, token }));
+  if (session === null || session.accountId === null) throw new AuthError("Invalid operator profile.");
+  setSession(session);
+}
+
+// Run once before React mounts, so StrictMode cannot consume an authorization code twice.
+export async function initializeAuth(): Promise<void> {
+  const query = new URLSearchParams(window.location.search);
+  const callback = query.has("state") && (query.has("code") || query.has("error"));
+  try {
+    const response = await fetch("/api/v1/auth/config", { cache: "no-store" });
+    if (!response.ok) throw new AuthError("Sign-in is unavailable. Please try reloading the page.");
+    const config = await response.json() as Record<string, unknown>;
+    allowDevAuth = config.allowDevAuth === true;
+    if (!allowDevAuth) {
+      if (typeof config.authority !== "string" || !config.authority.startsWith("https://")
+          || typeof config.clientId !== "string" || config.clientId.length === 0
+          || typeof config.scope !== "string") {
+        throw new AuthError("Operator sign-in is not configured. Contact your administrator.");
+      }
+      oidc = new UserManager({
+        authority: config.authority,
+        client_id: config.clientId,
+        redirect_uri: `${window.location.origin}/`,
+        response_type: "code",
+        response_mode: "query",
+        scope: config.scope,
+        automaticSilentRenew: false,
+        loadUserInfo: false,
+        // PKCE transaction state survives redirects; only our validated session persists afterwards.
+        stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
+        userStore: new WebStorageStateStore({ store: new InMemoryWebStorage() }),
+      });
+      if (callback) {
+        const user = await oidc.signinRedirectCallback();
+        await validateOperatorSession(user.access_token);
+        await oidc.removeUser();
+      } else {
+        const token = getToken();
+        if (token !== null) await validateOperatorSession(token);
+      }
+    }
+  } catch (error) {
+    clearSession();
+    initializationError = error instanceof Error ? error.message : "Sign-in failed. Please try again.";
+  } finally {
+    if (callback) window.history.replaceState(null, "", "/#/login");
+  }
+}
+
+export async function signIn(): Promise<void> {
+  if (oidc === null) throw new AuthError("Operator sign-in is not configured.");
+  await oidc.clearStaleState();
+  await oidc.signinRedirect({ prompt: "login" });
+}
 
 type Listener = (session: Session | null) => void;
 const listeners = new Set<Listener>();
@@ -100,6 +169,7 @@ export class AuthError extends Error {
 }
 
 export async function devLogin(request: DevLoginRequest): Promise<Session> {
+  if (!allowDevAuth) throw new AuthError("Development sign-in is disabled.");
   let response: Response;
   try {
     response = await fetch("/api/v1/admin/dev-login", {

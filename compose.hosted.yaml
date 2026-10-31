@@ -1,0 +1,31 @@
+# Run behind an HTTPS reverse proxy. The API also serves the React dashboard.
+services:
+  api:
+    build: { context: ., dockerfile: src/Typrite.Api/Dockerfile }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ConnectionStrings__Typrite: ${DATABASE_CONNECTION_STRING:?Set the Neon Npgsql connection string}
+      Auth__AllowDevAuth: "false"
+      Auth__SigningKey: ${DEVICE_SIGNING_KEY:?Set a persistent random signing key}
+      Auth__OperatorAuthority: ${OIDC_AUTHORITY:?Set the OIDC issuer URL}
+      Auth__OperatorAudience: ${OIDC_AUDIENCE:?Set the API audience}
+      Auth__OperatorClientId: ${OIDC_CLIENT_ID:?Set the public SPA client ID}
+      Auth__OperatorScopes: ${OIDC_SCOPES:-openid profile}
+      Releases__PublisherPrivateKeyPem: ${RELEASE_PRIVATE_KEY_PEM:?Set the persistent release signing private key}
+      Api__PublicBaseUrl: ${PUBLIC_API_URL:?Set the public HTTPS origin}
+      Storage__Root: /data/blobs
+      Database__MigrateOnStartup: "false"
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: [blobs:/data/blobs]
+
+  worker:
+    build: { context: ., dockerfile: src/Typrite.Worker/Dockerfile }
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Typrite: ${DATABASE_CONNECTION_STRING:?Set the Neon Npgsql connection string}
+
+volumes:
+  blobs:

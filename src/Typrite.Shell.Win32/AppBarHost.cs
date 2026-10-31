@@ -16,11 +16,16 @@ public sealed class AppBarHost : IAppBarHost
     private static readonly uint TaskbarCreatedMessage = RegisterWindowMessageW("TaskbarCreated");
 
     private readonly SUBCLASSPROC _proc; // rooted for the lifetime of the subclass
+    private readonly bool _allowActivation;
     private nint _hwnd;
     private bool _registered;
     private bool _sessionNotificationsRegistered;
 
-    public AppBarHost() => _proc = SubclassProc;
+    public AppBarHost(bool allowActivation = false)
+    {
+        _proc = SubclassProc;
+        _allowActivation = allowActivation;
+    }
 
     public event EventHandler<bool>? FullscreenAppChanged;
 
@@ -52,7 +57,7 @@ public sealed class AppBarHost : IAppBarHost
             throw new InvalidOperationException("SetWindowSubclass failed.");
         }
 
-        ApplyExStyle(hwnd, WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        ApplyExStyle(hwnd, WS_EX_TOOLWINDOW | (_allowActivation ? 0 : WS_EX_NOACTIVATE));
 
         var data = NewData();
         data.uCallbackMessage = CallbackMessage;

@@ -21,7 +21,7 @@ public sealed partial class BarWindow : Window, IBarSurface
 
     private readonly DeviceServices _services;
     private readonly nint _hwnd;
-    private readonly AppBarHost _host = new();
+    private readonly AppBarHost _host;
     private readonly OverlappedPresenter _presenter;
     private readonly BarCoordinator _bar;
     private readonly DisplayInfo _display;
@@ -37,11 +37,18 @@ public sealed partial class BarWindow : Window, IBarSurface
     private bool _closed;
     private bool _desktopUnavailable;
 
-    public BarWindow(DisplayArea area, DeviceServices services, FullscreenPolicy policy, bool safeMode = false)
+    public BarWindow(DisplayArea area, DeviceServices services, FullscreenPolicy policy, bool safeMode = false, bool taskbarDemo = false)
     {
         InitializeComponent();
         _services = services;
         var config = services.Configuration;
+        _host = new AppBarHost(allowActivation: taskbarDemo);
+        if (taskbarDemo)
+        {
+            var taskbar = new DemoTaskbar();
+            taskbar.ExitRequested += (_, _) => DemoExitRequested?.Invoke(this, EventArgs.Empty);
+            TaskbarSlot.Child = taskbar;
+        }
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _presenter = OverlappedPresenter.Create();
@@ -58,7 +65,8 @@ public sealed partial class BarWindow : Window, IBarSurface
         var dpi = WindowZOrder.DpiOf(_hwnd);
         _display = ResolveDisplay(area, bounds, dpi);
 
-        _bar = new BarCoordinator(_host, this, config.Layout.ReservationDip) { Policy = policy, Observer = Observe };
+        var reservationDip = config.Layout.ReservationDip + (taskbarDemo ? DemoTaskbar.HeightDip : 0);
+        _bar = new BarCoordinator(_host, this, reservationDip) { Policy = policy, Observer = Observe };
         _bar.ModeChanged += (_, mode) => _tracker?.DisplayModeChanged(mode);
         _host.ShellRestarted += (_, _) => _bar.ShellRestarted();
         _host.DpiChanged += (_, newDpi) => _bar.DpiChanged(newDpi);
@@ -116,6 +124,8 @@ public sealed partial class BarWindow : Window, IBarSurface
 
     /// <summary>Monitors were added, removed or re-arranged; the owner rebuilds all bars.</summary>
     public event EventHandler? TopologyChanged;
+
+    public event EventHandler? DemoExitRequested;
 
     public DisplayMode Mode => _bar.Mode;
 

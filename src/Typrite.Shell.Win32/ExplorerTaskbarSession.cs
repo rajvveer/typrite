@@ -48,8 +48,12 @@ public sealed class ExplorerTaskbarSession : IDisposable
 
             // Auto-hide releases Explorer's work-area reservation before TYPRITE requests its rectangle.
             var data = Data(taskbars[0]);
-            data.lParam = (nint)(_originalState | ABS_AUTOHIDE);
-            SHAppBarMessage(ABM_SETSTATE, ref data);
+            var currentState = (uint)SHAppBarMessage(ABM_GETSTATE, ref data);
+            if ((currentState & ABS_AUTOHIDE) == 0)
+            {
+                data.lParam = (nint)(currentState | ABS_AUTOHIDE);
+                SHAppBarMessage(ABM_SETSTATE, ref data);
+            }
             if (((uint)SHAppBarMessage(ABM_GETSTATE, ref data) & ABS_AUTOHIDE) == 0)
             {
                 throw new InvalidOperationException("Windows did not enable taskbar auto-hide.");

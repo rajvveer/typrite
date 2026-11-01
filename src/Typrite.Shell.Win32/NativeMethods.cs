@@ -138,6 +138,7 @@ internal static partial class NativeMethods
     public const uint WM_DISPLAYCHANGE = 0x007E;
     public const uint WM_WTSSESSION_CHANGE = 0x02B1;
     public const uint WM_POWERBROADCAST = 0x0218;
+    public const uint WM_NCCALCSIZE = 0x0083;
     public const int WTS_CONSOLE_CONNECT = 0x1;
     public const int WTS_CONSOLE_DISCONNECT = 0x2;
     public const int WTS_REMOTE_CONNECT = 0x3;
@@ -153,6 +154,10 @@ internal static partial class NativeMethods
 
     public const uint DWMWA_CLOAKED = 14;
     public const uint DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    public const uint DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    public const uint DWMWA_BORDER_COLOR = 34;
+    public const int DWMWCP_DONOTROUND = 1;
+    public const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
 
     public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
 
@@ -182,6 +187,7 @@ internal static partial class NativeMethods
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_FRAMECHANGED = 0x0020;
 
     public static readonly nint HWND_TOP = 0;
     public static readonly nint HWND_BOTTOM = 1;
@@ -274,6 +280,9 @@ internal static partial class NativeMethods
     public static partial bool SetForegroundWindow(nint hWnd);
 
     [LibraryImport("user32.dll")]
+    public static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetWindowRect(nint hWnd, out RECT lpRect);
 
@@ -335,6 +344,9 @@ internal static partial class NativeMethods
 
     [LibraryImport("dwmapi.dll")]
     public static partial int DwmGetWindowAttribute(nint hwnd, uint dwAttribute, out int pvAttribute, uint cbAttribute);
+
+    [LibraryImport("dwmapi.dll")]
+    public static partial int DwmSetWindowAttribute(nint hwnd, uint dwAttribute, ref int pvAttribute, uint cbAttribute);
 
     [LibraryImport("kernel32.dll")]
     public static partial nint OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);

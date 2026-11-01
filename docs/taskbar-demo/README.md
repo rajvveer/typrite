@@ -8,7 +8,13 @@ Typrite.Desktop.exe --taskbar-demo
 
 Close any existing TYPRITE instance first; the application allows one instance per session. Without the flag, the existing advertising bar runs as before.
 
-The navigation row sits above the advertising strip and adds 48 DIPs to the workspace reservation. It offers a Start-style pinned-app menu, File Explorer and Edge launchers, a running-window switcher (including minimized apps), Settings, and local clock/date. Unavailable apps and failed window switches show a status message. Start → Exit demo closes all TYPRITE bars and releases their reservations.
+Demo weather runs without the local API. It uses the Windows device location when available, resolves its city using [BigDataCloud](https://www.bigdatacloud.com/docs/free-api/free-reverse-geocode-to-city-api), and otherwise falls back to approximate [network location](https://ipwhois.io/documentation). Coordinates are rounded to two decimal places before requests. Current conditions and the next hours come from [Open-Meteo](https://open-meteo.com/en/docs). The location menu offers automatic detection or a saved manual city. Refresh retries immediately; recent cached weather is labeled when offline and expires after 24 hours. Production mode continues to use the authenticated weather proxy.
+
+The advertising slot still renders campaign images and videos. In demo mode, without a campaign, it runs the fictional FORM One headphone advertisement: a generated product visual, three headlines on an eight-second cycle, gentle product motion, and a working Explore preview. It is labeled DEMO AD, and its animation pauses when the bar yields or unloads. Normal mode keeps the existing house creative. The source image and exact generation prompt live in `src/Typrite.Desktop/Assets/mock-headphones-v1.*`.
+
+The layout separates local time, current weather, upcoming forecast, and the campaign. Compact forecast columns collapse on narrower displays so the ad and current conditions retain space. `--inspect-ui` additionally exposes the bar to Windows UI test tools; omit it for ordinary use.
+
+The navigation row sits above the advertising strip and adds 58 DIPs to the workspace reservation. Its compact gradient dock follows the weather's time-of-day palette. Illustrated app icons lift and enlarge on hover or keyboard focus, neighboring icons respond gently, and clicks compress the icon. Motion respects Windows' animation preference. A live window count, running dots, and an active-app underline refresh every two seconds, with window enumeration off the UI thread. Pinned apps restore their existing window when available, otherwise launch. The running-window menu includes minimized apps. Unavailable apps and failed window switches show a status message. Start → Exit demo closes all TYPRITE bars and releases their reservations.
 
 Demo mode automatically saves the Windows taskbar's auto-hide state, enables auto-hide to release its workspace reservation, and hides the primary and secondary taskbars before creating TYPRITE bars. It reapplies suppression after Explorer restarts and display rebuilds. Closing the demo restores the previous state and visibility; startup failures and unhandled application exceptions also attempt restoration. Normal mode does not change taskbar settings.
 
@@ -27,7 +33,7 @@ Forced termination, power loss, or an OS crash can skip restoration. If the task
 - Verify maximize, typing, Alt+Tab, 100/125/150% DPI, secondary displays, and full-screen yield/recovery.
 - Exit through Start → Exit demo; confirm all bars close and the work area is restored.
 
-No Windows visual or interaction validation has been performed on the development Mac.
+Windows x64 publishing and the taskbar startup/close restoration smoke test have passed. Final dock interaction checks and the full multi-monitor/DPI matrix above still need manual verification.
 
 To automate the basic startup/close restoration check on Windows (with no other TYPRITE instance running):
 

@@ -17,14 +17,16 @@ public sealed class AppBarHost : IAppBarHost
 
     private readonly SUBCLASSPROC _proc; // rooted for the lifetime of the subclass
     private readonly bool _allowActivation;
+    private readonly bool _showInSwitchers;
     private nint _hwnd;
     private bool _registered;
     private bool _sessionNotificationsRegistered;
 
-    public AppBarHost(bool allowActivation = false)
+    public AppBarHost(bool allowActivation = false, bool showInSwitchers = false)
     {
         _proc = SubclassProc;
         _allowActivation = allowActivation;
+        _showInSwitchers = showInSwitchers;
     }
 
     public event EventHandler<bool>? FullscreenAppChanged;
@@ -57,7 +59,19 @@ public sealed class AppBarHost : IAppBarHost
             throw new InvalidOperationException("SetWindowSubclass failed.");
         }
 
-        ApplyExStyle(hwnd, WS_EX_TOOLWINDOW | (_allowActivation ? 0 : WS_EX_NOACTIVATE));
+        if (_showInSwitchers)
+        {
+            // UI inspection only: tool windows are omitted by Windows automation inventories.
+            var style = (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtr(hwnd, GWL_EXSTYLE, (nint)((style & ~WS_EX_TOOLWINDOW) | 0x00040000)); // WS_EX_APPWINDOW
+        }
+        else
+        {
+            ApplyExStyle(hwnd, WS_EX_TOOLWINDOW | (_allowActivation ? 0 : WS_EX_NOACTIVATE));
+        }
+
+        // Re-run WM_NCCALCSIZE through the subclass so the frame WinUI leaves behind is dropped.
+        SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
         var data = NewData();
         data.uCallbackMessage = CallbackMessage;
@@ -136,6 +150,9 @@ public sealed class AppBarHost : IAppBarHost
 
         switch (uMsg)
         {
+            case WM_NCCALCSIZE when wParam != 0:
+                // No non-client area: a borderless WinUI window still keeps a 1px dialog frame, which reads as an outline on a docked bar.
+                return 0;
             case WM_WTSSESSION_CHANGE:
                 switch ((int)wParam)
                 {

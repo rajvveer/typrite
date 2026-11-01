@@ -1,64 +1,139 @@
-<UserControl
+﻿<UserControl
   x:Class="Typrite.Desktop.DemoTaskbar"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <Border Height="48" Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-          BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,1">
-    <Grid ColumnDefinitions="*,Auto,*" Padding="12,0">
-      <TextBlock x:Name="StatusText" Text="Demo · unlocked" VerticalAlignment="Center"
-                 MaxWidth="180" TextTrimming="CharacterEllipsis"
-                 Style="{StaticResource CaptionTextBlockStyle}"
-                 AutomationProperties.LiveSetting="Polite" />
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-        <Button Width="44" Height="44" Background="Transparent" BorderThickness="0"
-                AutomationProperties.Name="Start" ToolTipService.ToolTip="Start" AccessKey="S">
-          <Grid Width="20" Height="20" RowDefinitions="*,*" ColumnDefinitions="*,*" RowSpacing="2" ColumnSpacing="2">
-            <Rectangle Fill="{ThemeResource AccentFillColorDefaultBrush}" />
-            <Rectangle Grid.Column="1" Fill="{ThemeResource AccentFillColorDefaultBrush}" />
-            <Rectangle Grid.Row="1" Fill="{ThemeResource AccentFillColorDefaultBrush}" />
-            <Rectangle Grid.Row="1" Grid.Column="1" Fill="{ThemeResource AccentFillColorDefaultBrush}" />
-          </Grid>
-          <Button.Flyout>
-            <Flyout Placement="Top">
-              <StackPanel Width="280" Spacing="12" Padding="12">
-                <TextBlock Text="Pinned" Style="{StaticResource SubtitleTextBlockStyle}" />
-                <Button Content="Microsoft Edge" Tag="microsoft-edge:" Click="LaunchApp" HorizontalAlignment="Stretch" />
-                <Button Content="File Explorer" Tag="explorer.exe" Click="LaunchApp" HorizontalAlignment="Stretch" />
-                <Button Content="Notepad" Tag="notepad.exe" Click="LaunchApp" HorizontalAlignment="Stretch" />
-                <Button Content="Calculator" Tag="calculator:" Click="LaunchApp" HorizontalAlignment="Stretch" />
-                <Button Content="Settings" Tag="ms-settings:" Click="LaunchApp" HorizontalAlignment="Stretch" />
-                <TextBlock Text="Demo mode — Windows restrictions are not applied."
-                           TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
-                <Button Content="Exit demo" Click="ExitDemo" HorizontalAlignment="Stretch" />
-              </StackPanel>
-            </Flyout>
-          </Button.Flyout>
-        </Button>
-        <Button Width="44" Height="44" Background="Transparent" BorderThickness="0"
-                AutomationProperties.Name="Running apps" ToolTipService.ToolTip="Running apps">
-          <FontIcon Glyph="&#xE7F4;" FontSize="20" />
-          <Button.Flyout>
-            <MenuFlyout x:Name="RunningApps" Opening="RefreshRunningApps" Placement="Top" />
-          </Button.Flyout>
-        </Button>
-        <Button Width="44" Height="44" Background="Transparent" BorderThickness="0" Tag="explorer.exe"
-                Click="LaunchApp" AutomationProperties.Name="File Explorer" ToolTipService.ToolTip="File Explorer">
-          <FontIcon Glyph="&#xE8B7;" FontSize="20" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-        </Button>
-        <Button Width="44" Height="44" Background="Transparent" BorderThickness="0" Tag="microsoft-edge:"
-                Click="LaunchApp" AutomationProperties.Name="Microsoft Edge" ToolTipService.ToolTip="Microsoft Edge">
-          <FontIcon Glyph="&#xE774;" FontSize="20" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
-        </Button>
+  <UserControl.Resources>
+    <SolidColorBrush x:Key="DockAccent" Color="#BDD6FF" />
+    <Style x:Key="DockButton" TargetType="Button">
+      <Setter Property="Width" Value="46" /><Setter Property="Height" Value="42" />
+      <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="11" /><Setter Property="Padding" Value="0" />
+      <Setter Property="UseSystemFocusVisuals" Value="True" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid Background="Transparent">
+              <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                  <VisualStateGroup.Transitions><VisualTransition GeneratedDuration="0:0:0.14" /></VisualStateGroup.Transitions>
+                  <VisualState x:Name="Normal" />
+                  <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="HoverSurface.Opacity" Value="1" /></VisualState.Setters></VisualState>
+                  <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="HoverSurface.Opacity" Value="0.6" /></VisualState.Setters></VisualState>
+                  <VisualState x:Name="Disabled"><VisualState.Setters><Setter Target="Presenter.Opacity" Value="0.4" /></VisualState.Setters></VisualState>
+                </VisualStateGroup>
+              </VisualStateManager.VisualStateGroups>
+              <Border Background="{TemplateBinding Background}" CornerRadius="11" />
+              <Border x:Name="HoverSurface" Background="#13D8E8FF" BorderBrush="#20D8E8FF" BorderThickness="1" CornerRadius="11" Opacity="0" />
+              <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="AppIndicator" TargetType="Border">
+      <Setter Property="Width" Value="4" /><Setter Property="Height" Value="3" />
+      <Setter Property="CornerRadius" Value="2" /><Setter Property="Background" Value="{StaticResource DockAccent}" />
+      <Setter Property="VerticalAlignment" Value="Bottom" /><Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+  </UserControl.Resources>
+  <Border x:Name="DockFrame" Height="58" Background="#0B111D" BorderBrush="#2C456C" BorderThickness="0,0,0,1">
+    <Grid ColumnDefinitions="*,Auto,*" Padding="26,0,20,0" SizeChanged="OnDockSizeChanged">
+      <StackPanel x:Name="BrandPanel" Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+        <Border Width="24" Height="24" CornerRadius="8" Background="{StaticResource DockAccent}">
+          <FontIcon Glyph="&#xE724;" FontSize="13" Foreground="#1B2C45" />
+        </Border>
+        <TextBlock Text="TYPRITE" FontSize="10" FontWeight="SemiBold" CharacterSpacing="170" VerticalAlignment="Center" />
+        <Rectangle Fill="#314158" Width="1" Height="14" Margin="6,0" />
+        <TextBlock x:Name="StatusText" Text="Workspace" FontSize="11" Foreground="#99ABC3" VerticalAlignment="Center" MaxWidth="190" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite" />
       </StackPanel>
-      <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8">
-        <Button Width="44" Height="44" Background="Transparent" BorderThickness="0" Tag="ms-settings:"
-                Click="LaunchApp" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings">
-          <FontIcon Glyph="&#xE713;" FontSize="18" />
-        </Button>
-        <StackPanel VerticalAlignment="Center">
-          <TextBlock x:Name="TimeText" HorizontalAlignment="Right" Style="{StaticResource CaptionTextBlockStyle}" />
-          <TextBlock x:Name="DateText" HorizontalAlignment="Right" Style="{StaticResource CaptionTextBlockStyle}" />
+      <Border x:Name="DockIsland" Grid.Column="1" CornerRadius="16" BorderThickness="1" Padding="6,2" VerticalAlignment="Center">
+        <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#233149" /><GradientStop Color="#121C2D" Offset="1" /></LinearGradientBrush></Border.Background>
+        <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#526078" /><GradientStop Color="#26354C" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
+        <StackPanel x:Name="DockItems" Orientation="Horizontal" Spacing="4">
+          <Button x:Name="StartButton" Style="{StaticResource DockButton}" AutomationProperties.Name="Start" ToolTipService.ToolTip="Start · your workspace" AccessKey="S">
+            <Grid Width="42" Height="40">
+              <Grid Width="27" Height="27" VerticalAlignment="Center" Margin="0,-3,0,0" RowDefinitions="*,*" ColumnDefinitions="*,*" RowSpacing="3" ColumnSpacing="3">
+                <Rectangle Fill="#85CFFF" RadiusX="2" RadiusY="2" /><Rectangle Grid.Column="1" Fill="#54B1FF" RadiusX="2" RadiusY="2" />
+                <Rectangle Grid.Row="1" Fill="#55ACF7" RadiusX="2" RadiusY="2" /><Rectangle Grid.Row="1" Grid.Column="1" Fill="#3288EF" RadiusX="2" RadiusY="2" />
+              </Grid>
+            </Grid>
+            <Button.Flyout>
+              <Flyout x:Name="StartFlyout" Placement="Top" ShouldConstrainToRootBounds="False">
+                <StackPanel Width="270" Spacing="9" Padding="8">
+                  <TextBlock Text="Your workspace" FontSize="21" FontWeight="SemiBold" />
+                  <TextBlock Text="Pick up where you left off." FontSize="12" Foreground="#9DAFC8" Margin="0,0,0,5" />
+                  <Button Content="Microsoft Edge" Tag="microsoft-edge:" Click="LaunchApp" HorizontalAlignment="Stretch" />
+                  <Button Content="File Explorer" Tag="explorer.exe" Click="LaunchApp" HorizontalAlignment="Stretch" />
+                  <Button Content="Notepad" Tag="notepad.exe" Click="LaunchApp" HorizontalAlignment="Stretch" />
+                  <Button Content="Calculator" Tag="calculator:" Click="LaunchApp" HorizontalAlignment="Stretch" />
+                  <Button Content="Settings" Tag="ms-settings:" Click="LaunchApp" HorizontalAlignment="Stretch" />
+                  <Button Content="Exit demo" Click="ExitDemo" HorizontalAlignment="Stretch" Margin="0,6,0,0" />
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <Button x:Name="AppsButton" Style="{StaticResource DockButton}" AutomationProperties.Name="Running apps" ToolTipService.ToolTip="Running apps">
+            <Grid Width="42" Height="40">
+              <Grid Width="32" Height="30" Margin="0,-3,0,0">
+                <Border Width="23" Height="17" CornerRadius="4" Background="#476385" BorderBrush="#99B8E1" BorderThickness="1" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                <Border Width="25" Height="19" CornerRadius="4" BorderBrush="#CEE4FF" BorderThickness="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                  <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#608CBD" /><GradientStop Color="#29456C" Offset="1" /></LinearGradientBrush></Border.Background>
+                  <TextBlock x:Name="RunningCount" Text="0" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#F4F8FF" />
+                </Border>
+              </Grid>
+            </Grid>
+            <Button.Flyout><MenuFlyout x:Name="RunningApps" Opening="RefreshRunningApps" Placement="Top" ShouldConstrainToRootBounds="False" /></Button.Flyout>
+          </Button>
+          <Rectangle Fill="#3C4D66" Width="1" Height="23" Margin="5,0" />
+          <Button x:Name="ExplorerButton" Style="{StaticResource DockButton}" Tag="explorer.exe" Click="LaunchApp" AutomationProperties.Name="File Explorer" ToolTipService.ToolTip="File Explorer">
+            <Grid Width="42" Height="40">
+              <Viewbox Width="32" Height="29" Margin="0,-3,0,0"><Canvas Width="36" Height="32">
+                <Path Data="M 2,7 Q 2,4 5,4 L 14,4 L 18,8 L 31,8 Q 34,8 34,11 L 34,26 Q 34,29 31,29 L 5,29 Q 2,29 2,26 Z" Fill="#CB8B2D" />
+                <Path Data="M 3,11 L 33,11 L 33,17 L 3,17 Z" Fill="#FFE8AA" />
+                <Path Data="M 2,14 Q 2,12 5,12 L 31,12 Q 34,12 34,15 L 32,27 Q 32,29 29,29 L 6,29 Q 4,29 4,27 Z"><Path.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#FFD678" /><GradientStop Color="#E4A13F" Offset="1" /></LinearGradientBrush></Path.Fill></Path>
+                <Rectangle Canvas.Left="8" Canvas.Top="16" Width="12" Height="2" RadiusX="1" RadiusY="1" Fill="#FFE7A8" />
+              </Canvas></Viewbox>
+              <Border x:Name="ExplorerIndicator" Style="{StaticResource AppIndicator}" />
+            </Grid>
+          </Button>
+          <Button x:Name="EdgeButton" Style="{StaticResource DockButton}" Tag="microsoft-edge:" Click="LaunchApp" AutomationProperties.Name="Microsoft Edge" ToolTipService.ToolTip="Microsoft Edge">
+            <Grid Width="42" Height="40">
+              <Viewbox Width="31" Height="31" Margin="0,-3,0,0"><Canvas Width="36" Height="36">
+                <Ellipse Width="36" Height="36"><Ellipse.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#44E2C3" /><GradientStop Color="#159FD1" Offset="0.55" /><GradientStop Color="#1760D0" Offset="1" /></LinearGradientBrush></Ellipse.Fill></Ellipse>
+                <Path Data="M 0,20 C 1,9 22,7 29,19 C 24,15 17,15 14,19 C 8,27 25,32 33,24 C 29,35 12,39 4,29 C 2,26 1,23 0,20 Z" Fill="#1761C4" />
+                <Path Data="M 3,14 C 8,2 25,1 32,12 C 22,5 11,12 13,20 C 6,19 4,17 3,14 Z" Fill="#52E1C5" />
+                <Path Data="M 14,19 C 17,15 24,16 28,20 L 13,20 Z" Fill="#B3F5EC" />
+              </Canvas></Viewbox>
+              <Border x:Name="EdgeIndicator" Style="{StaticResource AppIndicator}" />
+            </Grid>
+          </Button>
+          <Button x:Name="NotepadButton" Style="{StaticResource DockButton}" Tag="notepad.exe" Click="LaunchApp" AutomationProperties.Name="Notepad" ToolTipService.ToolTip="Notepad">
+            <Grid Width="42" Height="40">
+              <Grid Width="27" Height="30" Margin="0,-3,0,0">
+                <Border CornerRadius="4" BorderBrush="#83C5EB" BorderThickness="1"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#EBF8FF" /><GradientStop Color="#A8D6EF" Offset="1" /></LinearGradientBrush></Border.Background></Border>
+                <Border Height="6" Background="#459CCE" CornerRadius="4,4,0,0" VerticalAlignment="Top" />
+                <StackPanel Spacing="3" Margin="5,11,5,0"><Rectangle Height="1" Fill="#589AC2" /><Rectangle Height="1" Fill="#589AC2" /><Rectangle Height="1" Fill="#589AC2" /><Rectangle Height="1" Fill="#589AC2" Width="10" HorizontalAlignment="Left" /></StackPanel>
+              </Grid>
+              <Border x:Name="NotepadIndicator" Style="{StaticResource AppIndicator}" />
+            </Grid>
+          </Button>
+          <Button x:Name="CalculatorButton" Style="{StaticResource DockButton}" Tag="calculator:" Click="LaunchApp" AutomationProperties.Name="Calculator" ToolTipService.ToolTip="Calculator">
+            <Grid Width="42" Height="40">
+              <Border Width="27" Height="31" Margin="0,-3,0,0" CornerRadius="6" BorderBrush="#D7C7F5" BorderThickness="1" Padding="4">
+                <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#B4A0DD" /><GradientStop Color="#74629F" Offset="1" /></LinearGradientBrush></Border.Background>
+                <Grid RowDefinitions="7,*" RowSpacing="4"><Border Background="#E6DDF9" CornerRadius="2" /><Grid Grid.Row="1" RowDefinitions="*,*" ColumnDefinitions="*,*" RowSpacing="3" ColumnSpacing="3"><Rectangle Fill="#E6DDF9" RadiusX="1" RadiusY="1" /><Rectangle Grid.Column="1" Fill="#E6DDF9" RadiusX="1" RadiusY="1" /><Rectangle Grid.Row="1" Fill="#E6DDF9" RadiusX="1" RadiusY="1" /><Rectangle Grid.Row="1" Grid.Column="1" Fill="#F1C08E" RadiusX="1" RadiusY="1" /></Grid></Grid>
+              </Border>
+              <Border x:Name="CalculatorIndicator" Style="{StaticResource AppIndicator}" />
+            </Grid>
+          </Button>
         </StackPanel>
+      </Border>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="10">
+        <Button Width="34" Height="34" Padding="0" Background="Transparent" BorderThickness="0" CornerRadius="10" Tag="ms-settings:" Click="LaunchApp" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings">
+          <FontIcon Glyph="&#xE713;" FontSize="17" Foreground="#A9B9D0" />
+        </Button>
+        <Button x:Name="ExitButton" Content="Exit demo &#x2197;" Click="ExitDemo" FontSize="10" Background="Transparent" BorderBrush="#35465F" BorderThickness="1" CornerRadius="8" Padding="10,6" Foreground="#B7C6DB" />
       </StackPanel>
     </Grid>
   </Border>

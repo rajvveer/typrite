@@ -5,6 +5,8 @@ namespace Typrite.Shell.Win32;
 /// <summary>User-initiated window switching for the demo taskbar; never bypasses foreground restrictions.</summary>
 public static class TaskbarActions
 {
+    public static nint ForegroundWindow => GetForegroundWindow();
+
     public static string Title(nint hwnd)
     {
         Span<char> buffer = stackalloc char[512];

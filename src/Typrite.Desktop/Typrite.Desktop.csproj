@@ -28,6 +28,14 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\house-400x225.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\mock-headphones-v1.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="typrite.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- Unpackaged publish must carry the compiled XAML and its resource index. -->
+  <Target Name="PublishCompiledXaml" AfterTargets="Publish">
+    <ItemGroup>
+      <CompiledXamlToPublish Include="$(TargetDir)*.xbf;$(TargetDir)$(AssemblyName).pri" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CompiledXamlToPublish)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

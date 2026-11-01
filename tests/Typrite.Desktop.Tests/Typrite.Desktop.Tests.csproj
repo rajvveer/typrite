@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Exercise portable desktop networking without loading the Windows XAML runtime. -->
+    <Compile Include="../../src/Typrite.Desktop/DemoWeatherClient.cs" Link="DemoWeatherClient.cs" />
+  </ItemGroup>
+</Project>

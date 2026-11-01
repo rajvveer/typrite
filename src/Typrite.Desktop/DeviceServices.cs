@@ -20,6 +20,7 @@ public sealed class DeviceServices : IDisposable
 
     private readonly AgentPipeClient _agent = new();
     private readonly HttpClient _http;
+    private readonly HttpClient _weatherHttp = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(12) };
     private readonly EventOutbox _outbox;
     private readonly CreativeCache _cache;
     private readonly EventUploader _uploader;
@@ -31,6 +32,7 @@ public sealed class DeviceServices : IDisposable
         var dir = DesktopSettings.DataDirectory;
         SessionId = Guid.NewGuid().ToString("N");
         Configuration = DeviceConfiguration.Default;
+        DemoWeather = new DemoWeatherClient(_weatherHttp, dir, TimeProvider.System);
 
         // Prefer the agent's enrolled identity and brokered tokens; fall back to the development credential (guide section 3).
         var agentIdentity = _agent.TryIdentityAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -79,6 +81,8 @@ public sealed class DeviceServices : IDisposable
     public DeviceConfiguration Configuration { get; private set; }
 
     public IDeliveryApi Api { get; }
+
+    public DemoWeatherClient DemoWeather { get; }
 
     public AdDeliveryPipeline Pipeline { get; }
 
@@ -140,6 +144,7 @@ public sealed class DeviceServices : IDisposable
         _outbox.Dispose();
         _cache.Dispose();
         _http.Dispose();
+        _weatherHttp.Dispose();
     }
 
     private async Task UploadAsync()

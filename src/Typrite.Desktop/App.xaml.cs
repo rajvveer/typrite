@@ -13,6 +13,7 @@ public partial class App : Application
     private Mutex? _singleInstance;
     private DispatcherQueueTimer? _rebuildTimer;
     private DispatcherQueueTimer? _commandTimer;
+    private DispatcherQueueTimer? _taskbarSettleTimer;
     private bool _rebuilding;
     private bool _safeMode;
     private bool _taskbarDemo;
@@ -42,6 +43,16 @@ public partial class App : Application
         _rebuildTimer.Interval = TimeSpan.FromMilliseconds(500);
         _rebuildTimer.IsRepeating = false;
         _rebuildTimer.Tick += (_, _) => RebuildBars();
+
+        if (_taskbarDemo)
+        {
+            // Explorer's auto-hide transition can reveal its taskbar after the initial hide.
+            // Settle once after startup/topology changes; do not continuously fight the shell.
+            _taskbarSettleTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _taskbarSettleTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _taskbarSettleTimer.IsRepeating = false;
+            _taskbarSettleTimer.Tick += (_, _) => _explorerTaskbar?.Suppress();
+        }
 
         _services = new DeviceServices(DesktopSettings.Load(), DispatcherQueue.GetForCurrentThread());
         try
@@ -104,7 +115,7 @@ public partial class App : Application
     }
 
     /// <summary>Bars render from cached state immediately; registration and policy arrive in the background.</summary>
-    private static async Task ConnectAsync(DeviceServices services)
+    private async Task ConnectAsync(DeviceServices services)
     {
         try
         {
@@ -114,15 +125,26 @@ public partial class App : Application
         catch (HttpRequestException)
         {
             // Offline at start: keep the cached configuration and retry on the next upload tick.
+            return;
         }
+
+        // The bars asked for weather and an ad before the device was registered; those requests could not authenticate.
+        _bars.ForEach(b => b.RefreshContent());
     }
 
     private void CreateBars()
     {
-        foreach (var area in DisplayArea.FindAll())
+        // FindAll's vector view does not project IIterable, so foreach throws InvalidCastException; index it instead.
+        var areas = DisplayArea.FindAll();
+        for (var i = 0; i < areas.Count; i++)
         {
+            var area = areas[i];
             var bar = new BarWindow(area, _services!, _policy, _safeMode, _taskbarDemo);
-            bar.ShellRestarted += (_, _) => _explorerTaskbar?.Suppress();
+            bar.ShellRestarted += (_, _) =>
+            {
+                _explorerTaskbar?.Suppress();
+                _taskbarSettleTimer?.Start();
+            };
             bar.DemoExitRequested += (_, _) =>
             {
                 foreach (var openBar in _bars.ToArray())
@@ -143,6 +165,10 @@ public partial class App : Application
             _bars.Add(bar);
             bar.AppWindow.Show(activateWindow: false);
         }
+
+        // Registering/showing an AppBar can reveal Explorer's taskbar again during startup.
+        _explorerTaskbar?.Suppress();
+        _taskbarSettleTimer?.Start();
     }
 
     /// <summary>WM_DISPLAYCHANGE arrives per bar and in bursts; one debounced rebuild recreates every bar from the new topology.</summary>

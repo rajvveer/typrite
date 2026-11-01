@@ -2,6 +2,8 @@ using System.Globalization;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Typrite.Player.Playback;
 using Typrite.Shell.AppBar;
 using Typrite.Shell.Displays;
@@ -36,21 +38,39 @@ public sealed partial class BarWindow : Window, IBarSurface
     private bool _rotating;
     private bool _closed;
     private bool _desktopUnavailable;
+    private readonly bool _taskbarDemo;
+    private readonly CancellationTokenSource _weatherLifetime = new();
+    private WeatherCity? _weatherCity;
+    private bool _automaticCity;
+    private bool _weatherRefreshing;
+    private DateTimeOffset _locatedAt;
+    private DemoWeather? _latestWeather;
+    private string? _themePeriod;
+    private DemoTaskbar? _demoNavigation;
 
     public BarWindow(DisplayArea area, DeviceServices services, FullscreenPolicy policy, bool safeMode = false, bool taskbarDemo = false)
     {
         InitializeComponent();
+        Title = "Typrite";
         _services = services;
+        _taskbarDemo = taskbarDemo;
+        Ad.EnableMockCampaign(taskbarDemo);
+        _weatherCity = services.DemoWeather.LoadCity();
+        _automaticCity = _weatherCity is null;
+        CityButton.IsEnabled = taskbarDemo;
         var config = services.Configuration;
-        _host = new AppBarHost(allowActivation: taskbarDemo);
+        var inspectUi = Environment.GetCommandLineArgs().Contains("--inspect-ui", StringComparer.Ordinal);
+        _host = new AppBarHost(allowActivation: taskbarDemo, showInSwitchers: inspectUi);
         if (taskbarDemo)
         {
             var taskbar = new DemoTaskbar();
+            _demoNavigation = taskbar;
             taskbar.ExitRequested += (_, _) => DemoExitRequested?.Invoke(this, EventArgs.Empty);
             TaskbarSlot.Child = taskbar;
         }
 
         _hwnd = WindowNative.GetWindowHandle(this);
+        WindowChrome.MakeFlush(_hwnd);
         _presenter = OverlappedPresenter.Create();
         _presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
         _presenter.IsResizable = false;
@@ -58,16 +78,20 @@ public sealed partial class BarWindow : Window, IBarSurface
         _presenter.IsMaximizable = false;
         _presenter.IsAlwaysOnTop = false;
         AppWindow.SetPresenter(_presenter);
-        AppWindow.IsShownInSwitchers = false;
+        AppWindow.IsShownInSwitchers = inspectUi;
 
         var b = area.OuterBounds;
         var bounds = new PhysicalRect(b.X, b.Y, b.X + b.Width, b.Y + b.Height);
         var dpi = WindowZOrder.DpiOf(_hwnd);
         _display = ResolveDisplay(area, bounds, dpi);
 
-        var reservationDip = config.Layout.ReservationDip + (taskbarDemo ? DemoTaskbar.HeightDip : 0);
+        var reservationDip = (taskbarDemo ? 176 : config.Layout.ReservationDip) + (taskbarDemo ? DemoTaskbar.HeightDip : 0);
         _bar = new BarCoordinator(_host, this, reservationDip) { Policy = policy, Observer = Observe };
-        _bar.ModeChanged += (_, mode) => _tracker?.DisplayModeChanged(mode);
+        _bar.ModeChanged += (_, mode) =>
+        {
+            _tracker?.DisplayModeChanged(mode);
+            Ad.SetPlaybackVisible(mode is DisplayMode.NormalReserved or DisplayMode.CompatibleOverlay);
+        };
         _host.ShellRestarted += (_, _) =>
         {
             ShellRestarted?.Invoke(this, EventArgs.Empty);
@@ -114,6 +138,7 @@ public sealed partial class BarWindow : Window, IBarSurface
         Closed += (_, _) =>
         {
             _closed = true;
+            _weatherLifetime.Cancel();
             _clock.Stop();
             _adTimer.Stop();
             _weatherTimer.Stop();
@@ -140,6 +165,13 @@ public sealed partial class BarWindow : Window, IBarSurface
     public void EnterSafeMode() => _bar.EnterSafeMode();
 
     public void AuthorizeRecovery() => _bar.AuthorizeRecovery();
+
+    /// <summary>Registration finished after the bar was built; fetch what the unauthenticated first attempt could not.</summary>
+    public void RefreshContent()
+    {
+        _ = RotateAdAsync();
+        _ = RefreshWeatherAsync();
+    }
 
     void IBarSurface.SendToBottom() => WindowZOrder.SendToBottom(_hwnd);
 
@@ -198,31 +230,212 @@ public sealed partial class BarWindow : Window, IBarSurface
         }
     }
 
-    private async Task RefreshWeatherAsync()
+    private async Task RefreshWeatherAsync(bool force = false)
     {
-        var (lat, lon) = await TryLocateAsync();
-        var report = await _services.GetWeatherAsync(lat, lon, CancellationToken.None);
-        if (_closed || report is null)
+        if (_closed || _weatherRefreshing) return;
+        _weatherRefreshing = true;
+        WeatherRefreshButton.IsEnabled = false;
+        CityButton.IsEnabled = false;
+        WeatherUpdatedText.Text = "Updating…";
+        try
         {
+            if (_taskbarDemo)
+            {
+                if (_automaticCity && (_weatherCity is null || DateTimeOffset.UtcNow - _locatedAt > TimeSpan.FromMinutes(30)))
+                {
+                    var (lat, lon) = await TryLocateAsync();
+                    if (lat is { } latitude && lon is { } longitude)
+                    {
+                        _weatherCity = await _services.DemoWeather.CityFromDeviceAsync(latitude, longitude, _weatherLifetime.Token);
+                        ToolTipService.SetToolTip(CityButton, "Automatic · device location. Click to change.");
+                    }
+                    else
+                    {
+                        _weatherCity = await _services.DemoWeather.DetectCityAsync(_weatherLifetime.Token) ?? _weatherCity;
+                        ToolTipService.SetToolTip(CityButton, "Automatic · approximate network location. Click to change.");
+                    }
+                    _locatedAt = DateTimeOffset.UtcNow;
+                }
+                if (_closed) return;
+                if (_weatherCity is null)
+                {
+                    LocationText.Text = "Choose your city";
+                    WeatherText.Text = "Location unavailable";
+                    FeelsLikeText.Text = "Tap the city name to set it";
+                    WeatherUpdatedText.Text = "Tap refresh to retry";
+                    return;
+                }
+                LocationText.Text = _weatherCity.Label;
+                var result = await _services.DemoWeather.GetAsync(_weatherCity, force, _weatherLifetime.Token);
+                if (_closed) return;
+                if (result.Weather is not { } weather)
+                {
+                    WeatherText.Text = "Weather unavailable";
+                    FeelsLikeText.Text = "Check your connection";
+                    WeatherUpdatedText.Text = result.Error;
+                    return;
+                }
+                TemperatureText.Text = Math.Round(weather.TemperatureC).ToString(CultureInfo.CurrentCulture);
+                WeatherText.Text = weather.Condition;
+                WeatherGlyph.Text = weather.Icon;
+                _latestWeather = weather;
+                NightArt.Visibility = weather.Code <= 2 && !weather.IsDay ? Visibility.Visible : Visibility.Collapsed;
+                SunArt.Visibility = weather.Code <= 2 && weather.IsDay ? Visibility.Visible : Visibility.Collapsed;
+                CloudArt.Visibility = weather.Code > 2 ? Visibility.Visible : Visibility.Collapsed;
+                RainArt.Visibility = weather.Code >= 51 ? Visibility.Visible : Visibility.Collapsed;
+                UpdateForecastLayout();
+                FeelsLikeText.Text = string.Create(CultureInfo.CurrentCulture, $"Feels like {weather.FeelsLikeC:0}°");
+                HighLowText.Text = string.Create(CultureInfo.CurrentCulture, $"H {weather.HighC:0}°   L {weather.LowC:0}°");
+                WindText.Text = string.Create(CultureInfo.CurrentCulture, $"Wind {weather.WindKmh:0} km/h");
+                HumidityText.Text = string.Create(CultureInfo.CurrentCulture, $"Humidity {weather.Humidity:0}%");
+                WeatherUpdatedText.Text = result.IsStale ? "Offline · last update" : "Open-Meteo";
+                ToolTipService.SetToolTip(WeatherUpdatedText, $"Weather by Open-Meteo · updated {weather.ObservedAtUtc.ToLocalTime():ddd HH:mm}");
+            }
+            else
+            {
+                var (lat, lon) = await TryLocateAsync();
+                var report = await _services.GetWeatherAsync(lat, lon, _weatherLifetime.Token);
+                if (_closed) return;
+                if (report is null) throw new HttpRequestException("No weather report.");
+                TemperatureText.Text = Math.Round(report.TemperatureC).ToString(CultureInfo.CurrentCulture);
+                WeatherText.Text = report.Condition;
+                WeatherGlyph.Text = WeatherEmoji(report.Condition);
+                LocationText.Text = report.LocationLabel;
+                FeelsLikeText.Text = "Current conditions";
+                WeatherUpdatedText.Text = $"Updated {report.ObservedAtUtc.ToLocalTime():t}";
+            }
+        }
+        catch (OperationCanceledException) when (_closed) { }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException or IOException)
+        {
+            if (!_closed)
+            {
+                WeatherText.Text = "Waiting for connection";
+                FeelsLikeText.Text = "Tap refresh to try again";
+                WeatherUpdatedText.Text = "Offline";
+            }
+        }
+        finally
+        {
+            _weatherRefreshing = false;
+            if (!_closed)
+            {
+                WeatherRefreshButton.IsEnabled = true;
+                CityButton.IsEnabled = _taskbarDemo;
+            }
+        }
+    }
+
+    private async void RefreshWeatherClicked(object sender, RoutedEventArgs e) => await RefreshWeatherAsync(force: true);
+
+    private void OnLayoutSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (ClockColumn is null || ForecastCard is null) return;
+        var wide = e.NewSize.Width >= 1150;
+        var clockWidth = e.NewSize.Width >= 1550 ? 190 : 155;
+        var forecastWidth = !wide ? 0 : e.NewSize.Width >= 1550 ? 350 : 225;
+        var adWidth = Math.Clamp(e.NewSize.Width * 0.34, 340, 660);
+        ClockColumn.Width = new GridLength(clockWidth);
+        WeatherColumn.Width = new GridLength(1, GridUnitType.Star);
+        ForecastColumn.Width = new GridLength(forecastWidth);
+        AdColumn.Width = new GridLength(adWidth);
+        ForecastCard.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
+        WeatherCurrentGrid.Width = wide ? Math.Max(250, e.NewSize.Width - 64 - clockWidth - forecastWidth - adWidth - 34) : double.NaN;
+        WeatherCurrentGrid.HorizontalAlignment = wide ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
+        UpdateForecastLayout();
+    }
+
+    private void OnForecastSizeChanged(object sender, SizeChangedEventArgs e) => UpdateForecastLayout();
+
+    private void UpdateForecastLayout()
+    {
+        if (HourlyForecast is null || ForecastCard is null || ForecastEmptyText is null) return;
+        var available = Math.Max(0, ForecastCard.ActualWidth - 28);
+        var count = Math.Clamp((int)(available / 60), 2, 4);
+        var hours = _latestWeather?.Hours.Where(hour => hour.Time > DateTimeOffset.UtcNow).Take(count).ToArray() ?? [];
+        var itemWidth = hours.Length > 0 ? available / hours.Length : 70;
+        var style = new Style(typeof(ContentPresenter));
+        style.Setters.Add(new Setter(FrameworkElement.WidthProperty, itemWidth));
+        HourlyForecast.ItemContainerStyle = style;
+        HourlyForecast.ItemsSource = hours;
+        ForecastEmptyText.Visibility = hours.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (hours.Length > 0)
+        {
+            var change = hours[^1].TemperatureC - hours[0].TemperatureC;
+            ForecastTrendText.Text = change < -0.5 ? "Cooling down" : change > 0.5 ? "Warming up" : "Steady conditions";
+        }
+    }
+
+    private async void SearchWeatherCity(object sender, RoutedEventArgs e)
+    {
+        CitySearchButton.IsEnabled = false;
+        CitySearchStatus.Text = "Searching…";
+        try
+        {
+            var cities = await _services.DemoWeather.SearchAsync(CitySearch.Text, _weatherLifetime.Token);
+            if (_closed) return;
+            CityResults.ItemsSource = cities;
+            CitySearchStatus.Text = cities.Count == 0 ? "No matching city. Try city, country." : "Choose a city below.";
+        }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
+        {
+            if (!_closed) CitySearchStatus.Text = "Search unavailable. Please try again.";
+        }
+        finally { if (!_closed) CitySearchButton.IsEnabled = true; }
+    }
+
+    private async void ChooseWeatherCity(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not WeatherCity city || _weatherRefreshing) return;
+        try { _services.DemoWeather.SaveCity(city); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CitySearchStatus.Text = "Couldn't save this city. Please try again.";
             return;
         }
-
-        WeatherText.Text = string.Create(CultureInfo.CurrentCulture, $"{Math.Round(report.TemperatureC)}°C · {report.Condition}");
-        LocationText.Text = report.LocationLabel;
+        _automaticCity = false;
+        _weatherCity = city;
+        ToolTipService.SetToolTip(CityButton, "Selected city. Click to use automatic location.");
+        CityFlyout.Hide();
+        await RefreshWeatherAsync(force: true);
     }
+
+    private async void UseAutomaticLocation(object sender, RoutedEventArgs e)
+    {
+        if (_weatherRefreshing) return;
+        try { _services.DemoWeather.UseAutomaticCity(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            CitySearchStatus.Text = "Couldn't save your preference. Please try again.";
+            return;
+        }
+        _automaticCity = true;
+        _locatedAt = default;
+        CityFlyout.Hide();
+        await RefreshWeatherAsync(force: true);
+    }
+
+    /// <summary>Conditions as named by the backend's weather providers.</summary>
+    private static string WeatherEmoji(string condition) => condition switch
+    {
+        "Clear" => "☀️",
+        "Partly cloudy" => "⛅",
+        "Fog" => "🌫️",
+        "Drizzle" or "Rain" or "Light rain" or "Showers" => "🌧️",
+        "Snow" or "Snow showers" => "❄️",
+        "Thunderstorm" => "⛈️",
+        "Windy" => "💨",
+        _ => "☁️",
+    };
 
     /// <summary>Coarse location only, and only when the user has allowed desktop apps to use it.</summary>
     private static async Task<(double?, double?)> TryLocateAsync()
     {
         try
         {
-            if (await Geolocator.RequestAccessAsync() != GeolocationAccessStatus.Allowed)
-            {
-                return (null, null);
-            }
-
-            var locator = new Geolocator { DesiredAccuracyInMeters = 5000 };
-            var pos = await locator.GetGeopositionAsync(TimeSpan.FromHours(1), TimeSpan.FromSeconds(10));
+            var locator = new Geolocator { DesiredAccuracyInMeters = 10000 };
+            if (locator.LocationStatus == PositionStatus.Disabled) return (null, null);
+            var pos = await locator.GetGeopositionAsync(TimeSpan.FromMinutes(30), TimeSpan.FromSeconds(3));
             return (pos.Coordinate.Point.Position.Latitude, pos.Coordinate.Point.Position.Longitude);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or TimeoutException or System.Runtime.InteropServices.COMException)
@@ -247,7 +460,40 @@ public sealed partial class BarWindow : Window, IBarSurface
     private void UpdateClock()
     {
         var now = DateTime.Now;
-        ClockText.Text = now.ToString("t", CultureInfo.CurrentCulture);
-        DateText.Text = now.ToString("D", CultureInfo.CurrentCulture);
+        UpdateTimePalette(now.Hour);
+        var culture = CultureInfo.CurrentCulture;
+        var pattern = culture.DateTimeFormat.ShortTimePattern;
+
+        // The AM/PM designator renders smaller beside the time; 24-hour cultures have none.
+        var hasDesignator = pattern.Contains('t', StringComparison.Ordinal);
+        ClockText.Text = now.ToString(hasDesignator ? pattern.Replace("t", string.Empty, StringComparison.Ordinal).Trim() : pattern, culture);
+        MeridiemText.Text = hasDesignator ? now.ToString("tt", culture) : string.Empty;
+        DateText.Text = now.ToString("ddd · dd MMM", culture).ToUpper(culture);
+        var offset = TimeZoneInfo.Local.GetUtcOffset(now);
+        GreetingText.Text = $"LOCAL TIME  ·  UTC{(offset < TimeSpan.Zero ? "−" : "+")}{offset.Duration():hh\\:mm}";
     }
+
+    private void UpdateTimePalette(int hour)
+    {
+        var theme = hour switch
+        {
+            >= 5 and < 10 => (Name: "MORNING", Root: 0xFF17140Fu, Start: 0xFF493C28u, End: 0xFF29231Bu, Border: 0xFF665239u, Accent: 0xFFFFD49Bu, Muted: 0xFFC3AF93u),
+            >= 10 and < 17 => (Name: "THIS AFTERNOON", Root: 0xFF10191Fu, Start: 0xFF244559u, End: 0xFF172C3Au, Border: 0xFF3B6077u, Accent: 0xFFB9E9FFu, Muted: 0xFF9BBCCDu),
+            >= 17 and < 20 => (Name: "THIS EVENING", Root: 0xFF19131Fu, Start: 0xFF432C53u, End: 0xFF281E38u, Border: 0xFF644775u, Accent: 0xFFE6BEF5u, Muted: 0xFFB9A1CBu),
+            _ => (Name: "TONIGHT", Root: 0xFF0B111Du, Start: 0xFF1B2E50u, End: 0xFF111D34u, Border: 0xFF2C456Cu, Accent: 0xFFBDD6FFu, Muted: 0xFF91A8CBu),
+        };
+        if (_themePeriod == theme.Name) return;
+        _themePeriod = theme.Name;
+        MainSurface.Background = new SolidColorBrush(Color(theme.Root));
+        ((SolidColorBrush)MainSurface.Resources["TimeAccent"]).Color = Color(theme.Accent);
+        ((SolidColorBrush)MainSurface.Resources["TimeMuted"]).Color = Color(theme.Muted);
+        ((SolidColorBrush)MainSurface.Resources["TimeOutline"]).Color = Color(theme.Border);
+        var gradient = (LinearGradientBrush)MainSurface.Resources["TimeGradient"];
+        gradient.GradientStops[0].Color = Color(theme.Start);
+        gradient.GradientStops[1].Color = Color(theme.End);
+        ForecastPeriodText.Text = theme.Name;
+        _demoNavigation?.SetPalette(Color(theme.Root), Color(theme.Border), Color(theme.Accent));
+    }
+
+    private static Windows.UI.Color Color(uint value) => Windows.UI.Color.FromArgb((byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value);
 }

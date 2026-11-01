@@ -12,19 +12,19 @@ public sealed class AgentPipeClient
 
     public async Task<AgentIdentity?> TryIdentityAsync(CancellationToken ct)
     {
-        var r = await TryExchangeAsync(new PipeRequest(PipeOps.Identity), ct);
+        var r = await TryExchangeAsync(new PipeRequest(PipeOps.Identity), ct).ConfigureAwait(false);
         return r is { Ok: true, DeviceId: { } id } && id != Guid.Empty ? new AgentIdentity(id, r.AccountId) : null;
     }
 
     public async Task<string?> TryTokenAsync(CancellationToken ct)
     {
-        var r = await TryExchangeAsync(new PipeRequest(PipeOps.Token), ct);
+        var r = await TryExchangeAsync(new PipeRequest(PipeOps.Token), ct).ConfigureAwait(false);
         return r is { Ok: true, Token: { } token } ? token : null;
     }
 
     public async Task<string?> TryNextCommandAsync(CancellationToken ct)
     {
-        var r = await TryExchangeAsync(new PipeRequest(PipeOps.NextCommand), ct);
+        var r = await TryExchangeAsync(new PipeRequest(PipeOps.NextCommand), ct).ConfigureAwait(false);
         return r is { Ok: true } ? r.Command : null;
     }
 
@@ -35,8 +35,9 @@ public sealed class AgentPipeClient
             await using var pipe = new NamedPipeClientStream(".", AgentPipe.Name, PipeDirection.InOut, PipeOptions.Asynchronous);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(ConnectTimeout);
-            await pipe.ConnectAsync(timeout.Token);
-            return await PipeClient.ExchangeAsync(pipe, request, ct);
+            // DeviceServices blocks the UI thread on TryIdentityAsync; resuming on that context would deadlock.
+            await pipe.ConnectAsync(timeout.Token).ConfigureAwait(false);
+            return await PipeClient.ExchangeAsync(pipe, request, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException or UnauthorizedAccessException)
         {

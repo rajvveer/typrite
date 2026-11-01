@@ -43,6 +43,15 @@ public static class TaskbarSmoke {
         }, IntPtr.Zero);
         return result.ToArray();
     }
+    public static bool HasVisibleWindow(uint processId) {
+        var found = false;
+        EnumWindows((hwnd, unused) => {
+            uint pid; GetWindowThreadProcessId(hwnd, out pid);
+            found = pid==processId && IsWindowVisible(hwnd);
+            return !found;
+        }, IntPtr.Zero);
+        return found;
+    }
     public static void Close(uint processId) {
         EnumWindows((hwnd, unused) => {
             uint pid; GetWindowThreadProcessId(hwnd, out pid);
@@ -71,9 +80,10 @@ try {
     $demoProcess = Start-Process -FilePath (Resolve-Path $DesktopExe).Path -ArgumentList '--taskbar-demo' -PassThru
     if (-not $demoProcess.WaitForInputIdle(30000)) { throw 'Demo did not finish UI startup.' }
     Wait-Until {
-        -not $demoProcess.HasExited -and ([TaskbarSmoke]::State() -band 1) -ne 0 -and
+        -not $demoProcess.HasExited -and [TaskbarSmoke]::HasVisibleWindow($demoProcess.Id) -and
+            ([TaskbarSmoke]::State() -band 1) -ne 0 -and
             @($taskbars | Where-Object { [TaskbarSmoke]::IsWindowVisible($_) }).Count -eq 0
-    } 'Demo did not hide the Windows taskbars and enable auto-hide.'
+    } 'Demo did not show its window, hide the Windows taskbars, and enable auto-hide.'
     [TaskbarSmoke]::Close($demoProcess.Id)
     Wait-Until { $demoProcess.HasExited } 'Demo did not close cleanly.'
     Wait-Until {

@@ -62,3 +62,5 @@ Unverified: nothing has run on physical Windows hardware. The WinUI desktop, the
 - Never claim an impression while the bar is hidden.
 - No Win32 outside `Typrite.Shell.Win32`. Logic stays testable.
 - One AppBar per display; `ABM_REMOVE` on every exit path.
+__Superior Architecture__
+
